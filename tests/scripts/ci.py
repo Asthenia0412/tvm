@@ -177,12 +177,14 @@ def docker(
         env["SCCACHE_CACHE_SIZE"] = os.getenv("SCCACHE_CACHE_SIZE", "50G")
         env["SCCACHE_SERVER_PORT"] = os.getenv("SCCACHE_SERVER_PORT", "4226")
 
-    # Match Jenkins' per-executor native build budget, including wheel builds.
-    scripts = [
-        "export CMAKE_BUILD_PARALLEL_LEVEL=$(( $(getconf _NPROCESSORS_ONLN) / "
-        "${CI_NUM_EXECUTORS:-1} ))",
-        'if [ "$CMAKE_BUILD_PARALLEL_LEVEL" -lt 1 ]; then export CMAKE_BUILD_PARALLEL_LEVEL=1; fi',
-    ] + scripts
+    # Pass the bound through Docker; CMake and scikit-build honor it directly.
+    env.setdefault(
+        "CMAKE_BUILD_PARALLEL_LEVEL",
+        os.environ.get(
+            "CMAKE_BUILD_PARALLEL_LEVEL",
+            str(max(NPROC // int(os.environ.get("CI_NUM_EXECUTORS", "1")), 1)),
+        ),
+    )
     env["PLATFORM"] = name
 
     docker_bash = REPO_ROOT / "docker" / "bash.sh"
@@ -401,8 +403,7 @@ def generate_command(
             scripts = [
                 f"./tests/scripts/task_config_build_{name}.sh {build_dir}",
                 f"rm -rf {build_dir}/wheels",
-                f"uv build --wheel --python python3 --out-dir {build_dir}/wheels ./3rdparty/tvm-ffi",
-                f"uv build --wheel --python python3 --out-dir {build_dir}/wheels . "
+                f"uv build --wheel --no-build-isolation --offline --python python3 --out-dir {build_dir}/wheels . "
                 f"-Cbuild-dir={build_dir} -Ccmake.build-type=RelWithDebInfo "
                 f"-Cbuild.verbose={'true' if verbose else 'false'}"
                 + (
@@ -413,8 +414,7 @@ def generate_command(
             ]
 
         # Direct --tests and interactive Python use the same installed artifacts.
-        if name != "wasm":
-            scripts.append("source ./tests/scripts/task_python_install_wheels.sh")
+        scripts.append("source ./tests/scripts/task_python_install_wheels.sh")
 
         if post_build is not None:
             scripts += post_build
@@ -433,9 +433,6 @@ def generate_command(
                 scripts.extend(script.format(build_dir=build_dir) for script in extra_scripts)
 
         docker_env = {
-            # The specialized Wasm source tests retain a native build path;
-            # the wheel installer clears it for Python wheel consumers.
-            "TVM_LIBRARY_PATH": str(REPO_ROOT / get_build_dir(name)),
             "TVM_WHEEL_DIR": str(REPO_ROOT / build_dir / "wheels"),
             "VERBOSE": "true" if verbose else "false",
         }

@@ -23,7 +23,6 @@ if [ "${IS_LOCAL:-0}" != "1" ]; then
     source "$(dirname "$0")/task_python_install_wheels.sh"
     export TVM_DOCS_USE_WHEEL=1
 else
-    uv pip install -v --target=python ./3rdparty/tvm-ffi/
     export PYTHONPATH="$(pwd)/python"
 fi
 
@@ -133,8 +132,6 @@ clean_files
 find . -type f -path "*.log" | xargs rm -f
 find . -type f -path "*.pyc" | xargs rm -f
 
-# LLVMModule JIT execution, needed by the tutorials this build runs.
-uv pip install --no-deps apache-tvm-ffi-orcjit==0.1.2
 
 
 cd docs

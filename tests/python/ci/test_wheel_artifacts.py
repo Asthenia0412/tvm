@@ -47,10 +47,9 @@ def test_local_wheel_build(monkeypatch, platform):
     wheel = next(script for script in scripts if "-Cbuild-dir=" in script)
     assert "-Ccmake.build-type=RelWithDebInfo" in wheel
     assert "all;cpptest" in wheel
-    assert any("./3rdparty/tvm-ffi" in script for script in scripts)
-    assert any("task_python_install_wheels.sh" in script for script in scripts) == (
-        platform != "wasm"
-    )
+    assert not any("./3rdparty/tvm-ffi" in script for script in scripts)
+    assert "--no-build-isolation --offline" in wheel
+    assert any("task_python_install_wheels.sh" in script for script in scripts)
     calls.clear()
     command(skip_build=True, tests=["tests/python/example.py"])
     assert not any("uv build" in script for script in calls[0]["scripts"])
@@ -60,9 +59,8 @@ def test_local_wheel_build(monkeypatch, platform):
 def test_wheel_directory_upload_retries_each_transfer(tmp_path, succeed):
     # Exercise the existing S3 CLI/retry boundary with a directory bundle.
     for relative in [
-        "ci/scripts/jenkins/s3.py",
-        "ci/scripts/jenkins/cmd_utils.py",
-        "ci/scripts/jenkins/retry.sh",
+        "ci/jenkins/scripts/s3.py",
+        "ci/jenkins/scripts/retry.sh",
         "ci/jenkins/data.py",
     ]:
         target = tmp_path / relative
@@ -71,7 +69,6 @@ def test_wheel_directory_upload_retries_each_transfer(tmp_path, succeed):
     wheels = tmp_path / "build/wheels"
     wheels.mkdir(parents=True)
     (wheels / "apache_tvm.whl").write_text("tvm")
-    (wheels / "apache_tvm_ffi.whl").write_text("ffi")
     binaries = tmp_path / "bin"
     binaries.mkdir()
     aws = binaries / "aws"
@@ -91,7 +88,7 @@ def test_wheel_directory_upload_retries_each_transfer(tmp_path, succeed):
     result = subprocess.run(
         [
             sys.executable,
-            "ci/scripts/jenkins/s3.py",
+            "ci/jenkins/scripts/s3.py",
             "--action",
             "upload",
             "--bucket",
@@ -165,3 +162,28 @@ def test_docs_import_path(tmp_path, monkeypatch, wheel_docs):
     bootstrap = config.read_text().split("# -- General configuration")[0]
     exec(compile(bootstrap, str(config), "exec"), {"__file__": str(config)})
     assert (source_python in sys.path) != wheel_docs
+
+
+@pytest.mark.parametrize(
+    "host_limit,caller_limit,expected", [(None, None, "2"), ("7", None, "7"), ("7", "9", "9")]
+)
+def test_local_parallel_limit_crosses_docker_boundary(
+    tmp_path, monkeypatch, host_limit, caller_limit, expected
+):
+    ci = load_local_ci()
+    calls = []
+    monkeypatch.setattr(ci, "check_docker", lambda: None)
+    monkeypatch.setattr(ci, "cmd", lambda command: calls.append(command))
+    monkeypatch.setattr(ci, "SCRIPT_DIR", tmp_path / "scripts")
+    monkeypatch.setattr(ci, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(ci, "NPROC", 8)
+    monkeypatch.setenv("CI_NUM_EXECUTORS", "3")
+    if host_limit is None:
+        monkeypatch.delenv("CMAKE_BUILD_PARALLEL_LEVEL", raising=False)
+    else:
+        monkeypatch.setenv("CMAKE_BUILD_PARALLEL_LEVEL", host_limit)
+    env = {} if caller_limit is None else {"CMAKE_BUILD_PARALLEL_LEVEL": caller_limit}
+    ci.docker("build", "ci_cpu", ["true"], env, False)
+    args = calls[0]
+    index = args.index(f"CMAKE_BUILD_PARALLEL_LEVEL={expected}")
+    assert args[index - 1] == "--env"

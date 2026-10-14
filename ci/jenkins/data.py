@@ -18,9 +18,9 @@
 """Bundle registry for CI artifact stashing.
 
 Single source of truth for the file lists uploaded to / downloaded from S3 by
-``ci/scripts/jenkins/s3.py``. This module deliberately carries nothing else —
-docker image tags live in ``ci/jenkins/docker-images.ini`` and Jinja-template
-metadata (image platforms, AWS endpoints) lives in ``ci/jenkins/generate.py``.
+``ci/jenkins/scripts/s3.py``. This module deliberately carries nothing else —
+docker image tags live in ``ci/jenkins/docker-images.ini`` and pipeline
+configuration lives in ``ci/jenkins/generated/common.groovy``.
 
 CLI: ``python3 ci/jenkins/data.py <bundle> [<bundle> ...]`` resolves bundle
 names to their file paths (one per line; exit 1 on unknown name). Used by
@@ -31,28 +31,10 @@ data-driven artifact lists.
 import sys
 
 files_to_stash = {
-    # Exact TVM and pinned FFI wheels, installed by Python test/docs consumers.
+    # Exact TVM wheels, installed by Python test/docs consumers.
     "wheels": ["build/wheels"],
     # Maven's native assembly still consumes these paths directly.
     "tvm_runtime": ["build/lib/libtvm_runtime.so", "build/lib/libtvm_ffi.so"],
-    # compiler files
-    "tvm_lib": [
-        "build/lib/libtvm_compiler.so",
-        "build/lib/libtvm_runtime.so",
-        "build/lib/libtvm_ffi.so",
-        "build/lib/libtvm_runtime_cuda.so",
-        "build/lib/libtvm_runtime_vulkan.so",
-        "build/lib/libtvm_runtime_opencl.so",
-        "build/lib/libtvm_runtime_rocm.so",
-        "build/lib/libtvm_runtime_extra.so",
-        "build/libtvm_allvisible.so",
-        "build/config.cmake",
-    ],
-    # gpu related compiler files
-    "tvm_lib_gpu_extra": [
-        "build/3rdparty/libflash_attn/src/libflash_attn.so",
-        "build/3rdparty/cutlass_fpA_intB_gemm/cutlass_kernels/libfpA_intB_gemm.so",
-    ],
 }
 
 

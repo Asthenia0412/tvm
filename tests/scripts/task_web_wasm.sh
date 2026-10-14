@@ -18,10 +18,8 @@
 
 set -euxo pipefail
 
-export PYTHONPATH=`pwd`/python
-
-# setup tvm-ffi into python folder
-uv pip install -v --target=python ./3rdparty/tvm-ffi/
+# Host Python uses the built wheel; Emscripten still builds its separate runtime.
+source "$(dirname "$0")/task_python_install_wheels.sh"
 
 rm -rf .emscripten_cache
 cd web

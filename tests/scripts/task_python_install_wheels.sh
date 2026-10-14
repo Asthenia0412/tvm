@@ -26,28 +26,46 @@ TVM_WHEEL_DIR="$(realpath "${TVM_WHEEL_DIR:-$(pwd)/build/wheels}")"
 export TVM_IMAGE_PYTHON="${TVM_IMAGE_PYTHON:-$(command -v python3)}"
 export TVM_IMAGE_SITE_PACKAGES="${TVM_IMAGE_SITE_PACKAGES:-$("$TVM_IMAGE_PYTHON" -I -c 'import site; print("\n".join(site.getsitepackages()))')}"
 export VIRTUAL_ENV="${TVM_WHEEL_DIR%/}/../wheel-venv"
-uv venv --python "$TVM_IMAGE_PYTHON" --clear "$VIRTUAL_ENV"
+uv venv --offline --python "$TVM_IMAGE_PYTHON" --clear "$VIRTUAL_ENV"
 # Append the image dependencies after our wheels without executing its .pth files:
 # system-site-packages can install editable-import hooks ahead of the wheel.
 TVM_WHEEL_SITE="$("$VIRTUAL_ENV/bin/python3" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
 printf '%s\n' "$TVM_IMAGE_SITE_PACKAGES" > "$TVM_WHEEL_SITE/image-dependencies.pth"
 export PATH="$VIRTUAL_ENV/bin:$PATH"
-uv pip install --python "$VIRTUAL_ENV/bin/python3" --no-deps --reinstall \
-    "$TVM_WHEEL_DIR"/apache_tvm-*.whl "$TVM_WHEEL_DIR"/apache_tvm_ffi-*.whl
+uv pip install --python "$VIRTUAL_ENV/bin/python3" --no-deps --offline --reinstall \
+    "$TVM_WHEEL_DIR"/apache_tvm-*.whl
 
 # Fail before pytest if a source/editable install or native override leaked in.
 python3 - <<'PYTHON'
-from pathlib import Path
+import os
 import sys
+from importlib.metadata import requires, version
+from pathlib import Path
+from packaging.requirements import Requirement
+
+# --no-deps leaves dependency ownership with the image. Check the wheel's own
+# requirements without invoking a resolver or accepting a stale hardcoded floor.
+for text in requires("apache-tvm") or []:
+    requirement = Requirement(text)
+    if requirement.marker and not requirement.marker.evaluate({"extra": ""}):
+        continue
+    installed = version(requirement.name)
+    assert requirement.specifier.contains(installed, prereleases=True), (text, installed)
+
 import tvm
 import tvm_ffi
 
 prefix = Path(sys.prefix).resolve()
-for module in (tvm, tvm_ffi):
-    path = Path(module.__file__).resolve()
-    assert path.is_relative_to(prefix), path
-    print(f"Installed {module.__name__}: {path}")
-for name, library in {"tvm_ffi": tvm_ffi.LIB, **tvm.base._LOADED_LIBS}.items():
+path = Path(tvm.__file__).resolve()
+assert path.is_relative_to(prefix), path
+print(f"Installed tvm: {path}")
+# FFI is supplied by the image, not rebuilt or transferred with TVM.
+image_sites = [Path(p).resolve() for p in os.environ["TVM_IMAGE_SITE_PACKAGES"].splitlines()]
+for path in (Path(tvm_ffi.__file__).resolve(), Path(tvm_ffi.LIB._name).resolve()):
+    assert any(path.is_relative_to(site) for site in image_sites), path
+    print(f"Image FFI: {path}")
+assert {"tvm_runtime", "tvm_compiler"} <= tvm.base._LOADED_LIBS.keys()
+for name, library in tvm.base._LOADED_LIBS.items():
     path = Path(library._name).resolve()
     assert path.is_relative_to(prefix), (name, path)
     print(f"Installed {name}: {path}")
