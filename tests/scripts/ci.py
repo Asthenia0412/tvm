@@ -165,27 +165,24 @@ def docker(
     """
     check_docker()
 
-    # As sccache is added to these images these can be uncommented
-    sccache_images = {
-        "ci_gpu",
-        "ci_cpu",
-        # "ci_wasm",
-        "ci_cortexm",
-        "ci_arm",
-        "ci_riscv",
-        "ci_adreno",
-    }
-
-    if image in sccache_images and os.getenv("USE_SCCACHE", "1") == "1":
+    if os.getenv("USE_SCCACHE", "1") == "1":
         scripts = [
-            "sccache --start-server",
+            "if command -v sccache >/dev/null; then",
+            "  export CC=/opt/sccache/cc CXX=/opt/sccache/c++",
+            "  sccache --start-server || true",
+            "  sccache --show-stats",
+            '  trap "sccache --show-stats' + ("; interact" if interactive else "") + '" EXIT',
+            "fi",
         ] + scripts
-        # Set the C/C++ compiler so CMake picks them up in the build
-        env["CC"] = "/opt/sccache/cc"
-        env["CXX"] = "/opt/sccache/c++"
         env["SCCACHE_CACHE_SIZE"] = os.getenv("SCCACHE_CACHE_SIZE", "50G")
         env["SCCACHE_SERVER_PORT"] = os.getenv("SCCACHE_SERVER_PORT", "4226")
 
+    # Match Jenkins' per-executor native build budget, including wheel builds.
+    scripts = [
+        "export CMAKE_BUILD_PARALLEL_LEVEL=$(( $(getconf _NPROCESSORS_ONLN) / "
+        "${CI_NUM_EXECUTORS:-1} ))",
+        'if [ "$CMAKE_BUILD_PARALLEL_LEVEL" -lt 1 ]; then export CMAKE_BUILD_PARALLEL_LEVEL=1; fi',
+    ] + scripts
     env["PLATFORM"] = name
 
     docker_bash = REPO_ROOT / "docker" / "bash.sh"
@@ -292,7 +289,8 @@ def docs(
 
     scripts = extra_setup + [
         config_script,
-        f"./tests/scripts/task_build.py --build-dir {build_dir}",
+        f"cmake -S . -B {build_dir} -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo",
+        f"cmake --build {build_dir} --verbose",
     ]
 
     if skip_build:
@@ -402,8 +400,21 @@ def generate_command(
         else:
             scripts = [
                 f"./tests/scripts/task_config_build_{name}.sh {build_dir}",
-                f"./tests/scripts/task_build.py --build-dir {build_dir}",
+                f"rm -rf {build_dir}/wheels",
+                f"uv build --wheel --python python3 --out-dir {build_dir}/wheels ./3rdparty/tvm-ffi",
+                f"uv build --wheel --python python3 --out-dir {build_dir}/wheels . "
+                f"-Cbuild-dir={build_dir} -Ccmake.build-type=RelWithDebInfo "
+                f"-Cbuild.verbose={'true' if verbose else 'false'}"
+                + (
+                    " -Ccmake.define.USE_GTEST=ON '-Cbuild.targets=all;cpptest'"
+                    if kwargs.get("cpp")
+                    else ""
+                ),
             ]
+
+        # Direct --tests and interactive Python use the same installed artifacts.
+        if name != "wasm":
+            scripts.append("source ./tests/scripts/task_python_install_wheels.sh")
 
         if post_build is not None:
             scripts += post_build
@@ -422,10 +433,10 @@ def generate_command(
                 scripts.extend(script.format(build_dir=build_dir) for script in extra_scripts)
 
         docker_env = {
-            # Need to specify the library path manually or else TVM can't
-            # determine which build directory to use (i.e. if there are
-            # multiple copies of libtvm_compiler.so / libtvm_runtime.so laying around)
+            # The specialized Wasm source tests retain a native build path;
+            # the wheel installer clears it for Python wheel consumers.
             "TVM_LIBRARY_PATH": str(REPO_ROOT / get_build_dir(name)),
+            "TVM_WHEEL_DIR": str(REPO_ROOT / build_dir / "wheels"),
             "VERBOSE": "true" if verbose else "false",
         }
 

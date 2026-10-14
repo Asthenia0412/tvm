@@ -31,10 +31,10 @@ data-driven artifact lists.
 import sys
 
 files_to_stash = {
-    # Executables and build files needed to run c++ tests
-    "cpptest": ["build/cpptest", "build/build.ninja", "build/CMakeFiles/rules.ninja"],
-    # runtime files
-    "tvm_runtime": ["build/lib/libtvm_runtime.so", "build/config.cmake"],
+    # Exact TVM and pinned FFI wheels, installed by Python test/docs consumers.
+    "wheels": ["build/wheels"],
+    # Maven's native assembly still consumes these paths directly.
+    "tvm_runtime": ["build/lib/libtvm_runtime.so", "build/lib/libtvm_ffi.so"],
     # compiler files
     "tvm_lib": [
         "build/lib/libtvm_compiler.so",

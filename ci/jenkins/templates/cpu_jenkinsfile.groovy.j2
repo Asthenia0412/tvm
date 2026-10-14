@@ -29,9 +29,8 @@
     script: "${docker_run} ${ci_cpu} ./tests/scripts/task_config_build_cpu.sh build",
     label: 'Create CPU CMake config',
   )
-  cmake_build(ci_cpu, 'build')
-  make_cpp_tests(ci_cpu, 'build')
-  {{ m.upload_artifacts(tag='cpu', bundles=["tvm_lib", "cpptest"]) }}
+  wheel_build(ci_cpu, true)
+  {{ m.upload_artifacts(tag='cpu', bundles=["wheels"]) }}
 {% endcall %}
 
 {% set test_method_names = [] %}
@@ -45,7 +44,6 @@
   test_method_names=test_method_names,
 ) %}
   {{ m.download_artifacts(tag='cpu') }}
-  cpp_unittest(ci_cpu)
   python_unittest(ci_cpu)
 {% endcall %}
 

@@ -60,7 +60,7 @@
 // 'python3 jenkins/generate.py'
 // Note: This timestamp is here to ensure that updates to the Jenkinsfile are
 // always rebased on main before merging:
-// Generated at 2026-07-05T12:52:04.884879
+// Generated at 2026-10-14T21:26:39.068100
 
 import org.jenkinsci.plugins.pipeline.modeldefinition.Utils
 // These are set at runtime from data in ci/jenkins/docker-images.yml, update
@@ -411,30 +411,40 @@ def python_unittest(image) {
   )
 }
 
-def make_cpp_tests(image, build_dir) {
-  sh (
-    script: """
-      set -eux
-      ${docker_run} ${image} python3 ./tests/scripts/task_build.py \
-        --sccache-bucket tvm-sccache-prod \
-        --sccache-region us-west-2 \
-        --cmake-target cpptest \
-        --build-dir ${build_dir}
-      """,
-    label: 'Make C++ tests',
-  )
+// Keep compiler caching and executor limits identical for wheels and the
+// separate runtime-only compile check. Build commands remain at their callers.
+def build_environment() {
+  return '''
+    set -eux
+    export CMAKE_BUILD_PARALLEL_LEVEL=$(( $(getconf _NPROCESSORS_ONLN) / ${CI_NUM_EXECUTORS:-1} ))
+    if [ "$CMAKE_BUILD_PARALLEL_LEVEL" -lt 1 ]; then export CMAKE_BUILD_PARALLEL_LEVEL=1; fi
+    if command -v sccache >/dev/null; then
+      export CC=/opt/sccache/cc CXX=/opt/sccache/c++
+      if [ -n "${AWS_ACCESS_KEY_ID:-}" ]; then
+        export SCCACHE_BUCKET=tvm-sccache-prod SCCACHE_REGION=us-west-2
+      fi
+      sccache --start-server || true
+      sccache --show-stats
+      trap "sccache --show-stats" EXIT
+    fi
+  '''
 }
 
-def cmake_build(image, path) {
+def wheel_build(image, cpp_tests = false) {
+  def commands = build_environment() + '''
+    rm -rf build/wheels
+    uv build --wheel --python python3 --out-dir build/wheels ./3rdparty/tvm-ffi
+    uv build --wheel --python python3 --out-dir build/wheels . \
+      -Ccmake.build-type=RelWithDebInfo -Cbuild.verbose="${VERBOSE:-true}"
+  '''.stripIndent().trim()
+  if (cpp_tests) {
+    commands += " -Ccmake.define.USE_GTEST=ON -Cbuild.targets=all\\;cpptest"
+    // cpptest links the same native tree that scikit-build just packaged.
+    commands += "\n./tests/scripts/task_cpp_unittest.sh build"
+  }
   sh (
-    script: "${docker_run} --env CI_NUM_EXECUTORS ${image} ./tests/scripts/task_build.py --sccache-bucket tvm-sccache-prod --sccache-region us-west-2 --build-dir ${path}",
-    label: 'Run CMake build',
-  )
-}
-def cpp_unittest(image) {
-  sh (
-    script: "${docker_run} --env CI_NUM_EXECUTORS ${image} ./tests/scripts/task_cpp_unittest.sh",
-    label: 'Run C++ tests',
+    script: "${docker_run} --env CI_NUM_EXECUTORS ${image} bash -c '${commands}'",
+    label: 'Build wheel artifacts' + (cpp_tests ? ' and run C++ tests' : ''),
   )
 }
 
@@ -458,9 +468,9 @@ def run_build(node_type) {
             'PLATFORM=gpu',
             ], {
             sh "${docker_run} --no-gpu ${ci_gpu} ./tests/scripts/task_config_build_gpu.sh build"
-        cmake_build("${ci_gpu} --no-gpu", 'build')
+        wheel_build("${ci_gpu} --no-gpu")
         sh(
-            script: "./${jenkins_scripts_root}/s3.py --action upload --bucket ${s3_bucket} --prefix ${s3_prefix}/gpu --bundle tvm_lib --bundle tvm_lib_gpu_extra",
+            script: "./${jenkins_scripts_root}/s3.py --action upload --bucket ${s3_bucket} --prefix ${s3_prefix}/gpu --bundle wheels --bundle tvm_runtime",
             label: 'Upload artifacts to S3',
           )
 
@@ -468,7 +478,11 @@ def run_build(node_type) {
         // compiler test
         sh "rm -rf build"
         sh "${docker_run} --no-gpu ${ci_gpu} ./tests/scripts/task_config_build_gpu_other.sh build"
-        sh "${docker_run} --env CI_NUM_EXECUTORS ${ci_gpu} --no-gpu ./tests/scripts/task_build.py --sccache-bucket tvm-sccache-prod --sccache-region us-west-2 --cmake-target tvm_runtime --build-dir build"
+        def runtime_commands = build_environment() + '''
+          cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake --build build --target tvm_runtime --verbose
+        '''
+        sh "${docker_run} --env CI_NUM_EXECUTORS ${ci_gpu} --no-gpu bash -c '${runtime_commands}'"
           })
         }
       }

@@ -26,13 +26,17 @@
   platform="gpu",
 ) %}
   sh "${docker_run} --no-gpu ${ci_gpu} ./tests/scripts/task_config_build_gpu.sh build"
-  cmake_build("${ci_gpu} --no-gpu", 'build')
-  {{ m.upload_artifacts(tag='gpu', bundles=["tvm_lib", "tvm_lib_gpu_extra"]) }}
+  wheel_build("${ci_gpu} --no-gpu")
+  {{ m.upload_artifacts(tag='gpu', bundles=["wheels", "tvm_runtime"]) }}
 
   // compiler test
   sh "rm -rf build"
   sh "${docker_run} --no-gpu ${ci_gpu} ./tests/scripts/task_config_build_gpu_other.sh build"
-  sh "${docker_run} --env CI_NUM_EXECUTORS ${ci_gpu} --no-gpu ./tests/scripts/task_build.py --sccache-bucket tvm-sccache-prod --sccache-region us-west-2 --cmake-target tvm_runtime --build-dir build"
+  def runtime_commands = build_environment() + '''
+    cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+    cmake --build build --target tvm_runtime --verbose
+  '''
+  sh "${docker_run} --env CI_NUM_EXECUTORS ${ci_gpu} --no-gpu bash -c '${runtime_commands}'"
 {% endcall %}
 
 {% set test_method_names = [] %}
