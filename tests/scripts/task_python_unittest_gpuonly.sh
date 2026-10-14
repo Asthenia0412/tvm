@@ -31,6 +31,14 @@ export TVM_TEST_TARGETS='cuda;metal;rocm;nvptx'
 # only minimal functionality of Vulkan runtime.
 export TVM_TEST_TARGETS='{"kind":"vulkan","from_device":0}'
 
-./tests/scripts/task_python_unittest.sh \
-    tests/python/backend/vulkan/codegen/test_vulkan.py \
-    tests/python/backend/vulkan/test_vulkan_module_export.py
+if [ "${TVM_TEST_USE_WHEEL:-0}" = "1" ]; then
+    ./tests/scripts/task_python_unittest.sh \
+        tests/python/backend/vulkan/codegen/test_vulkan.py \
+        tests/python/backend/vulkan/test_vulkan_module_export.py
+else
+    export PYTHONPATH="$(pwd)/python"
+    export PYTEST_ADDOPTS="${CI_PYTEST_ADD_OPTIONS:-} ${PYTEST_ADDOPTS:-}"
+    python3 -m pytest -vvs -n auto -m "${TVM_TEST_MARKER}" \
+        tests/python/backend/vulkan/codegen/test_vulkan.py \
+        tests/python/backend/vulkan/test_vulkan_module_export.py
+fi

@@ -18,8 +18,13 @@
 
 set -euxo pipefail
 
-# Host Python uses the built wheel; Emscripten still builds its separate runtime.
-source "$(dirname "$0")/task_python_install_wheels.sh"
+# Host Python uses wheels in the native pipeline. Keep source mode for old main.
+if [ "${TVM_TEST_USE_WHEEL:-0}" = "1" ]; then
+    source "$(dirname "$0")/task_python_install_wheels.sh"
+else
+    export PYTHONPATH="$(pwd)/python"
+    uv pip install -v --target=python ./3rdparty/tvm-ffi/
+fi
 
 rm -rf .emscripten_cache
 cd web

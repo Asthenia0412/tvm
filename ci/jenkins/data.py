@@ -31,10 +31,32 @@ data-driven artifact lists.
 import sys
 
 files_to_stash = {
-    # Exact TVM wheels, installed by Python test/docs consumers.
+    # New pipelines install the exact TVM wheel and retain only JVM native files.
     "wheels": ["build/wheels"],
-    # Maven's native assembly still consumes these paths directly.
-    "tvm_runtime": ["build/lib/libtvm_runtime.so", "build/lib/libtvm_ffi.so"],
+    "jvm_runtime": ["build/lib/libtvm_runtime.so", "build/lib/libtvm_ffi.so"],
+    # Keep the original bundles while trusted main still runs the old pipeline.
+    # Executables and build files needed to run c++ tests
+    "cpptest": ["build/cpptest", "build/build.ninja", "build/CMakeFiles/rules.ninja"],
+    # runtime files
+    "tvm_runtime": ["build/lib/libtvm_runtime.so", "build/config.cmake"],
+    # compiler files
+    "tvm_lib": [
+        "build/lib/libtvm_compiler.so",
+        "build/lib/libtvm_runtime.so",
+        "build/lib/libtvm_ffi.so",
+        "build/lib/libtvm_runtime_cuda.so",
+        "build/lib/libtvm_runtime_vulkan.so",
+        "build/lib/libtvm_runtime_opencl.so",
+        "build/lib/libtvm_runtime_rocm.so",
+        "build/lib/libtvm_runtime_extra.so",
+        "build/libtvm_allvisible.so",
+        "build/config.cmake",
+    ],
+    # gpu related compiler files
+    "tvm_lib_gpu_extra": [
+        "build/3rdparty/libflash_attn/src/libflash_attn.so",
+        "build/3rdparty/cutlass_fpA_intB_gemm/cutlass_kernels/libfpA_intB_gemm.so",
+    ],
 }
 
 

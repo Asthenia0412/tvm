@@ -24,7 +24,7 @@ built_images = [:]
 upstream_revision = null
 max_time = 180
 rebuild_docker_images = false
-docker_run = 'docker/bash.sh --env CI --env PLATFORM --env TEST_STEP_NAME'
+docker_run = 'docker/bash.sh --env CI --env PLATFORM --env TEST_STEP_NAME --env TVM_TEST_USE_WHEEL=1'
 docker_build = 'docker/build.sh'
 s3_bucket = 'tvm-jenkins-artifacts-prod'
 s3_prefix = "tvm/${env.BRANCH_NAME}/${env.BUILD_NUMBER}"

@@ -187,3 +187,61 @@ def test_local_parallel_limit_crosses_docker_boundary(
     args = calls[0]
     index = args.index(f"CMAKE_BUILD_PARALLEL_LEVEL={expected}")
     assert args[index - 1] == "--env"
+
+
+@pytest.mark.parametrize(
+    "script", ["task_python_unittest.sh", "task_python_docs.sh", "task_web_wasm.sh"]
+)
+@pytest.mark.parametrize("wheel_mode", [False, True])
+def test_shared_scripts_preserve_legacy_and_wheel_modes(tmp_path, script, wheel_mode):
+    scripts = tmp_path / "tests/scripts"
+    scripts.mkdir(parents=True)
+    shutil.copy(ROOT / "tests/scripts" / script, scripts / script)
+    # Substitute only the install boundary; execute the real caller's mode routing.
+    (scripts / "task_python_install_wheels.sh").write_text('echo WHEEL_SETUP >> "$CALL_LOG"\n')
+    for directory in ["docs", "web", "bin"]:
+        (tmp_path / directory).mkdir()
+    for tool in ["uv", "python3", "make"]:
+        binary = tmp_path / "bin" / tool
+        binary.write_text(
+            f'#!/bin/sh\necho "{tool}:$*" >> "$CALL_LOG"\n'
+            + ("exit 77\n" if tool == "make" else "")
+        )
+        binary.chmod(0o755)
+    result = subprocess.run(
+        [shutil.which("bash"), str(scripts / script)],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path / 'bin'}:{os.environ['PATH']}",
+            "CALL_LOG": str(tmp_path / "calls"),
+            "TVM_TEST_USE_WHEEL": "1" if wheel_mode else "0",
+            "IS_LOCAL": "0",
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == (0 if script == "task_python_unittest.sh" else 77), result.stderr
+    calls = (tmp_path / "calls").read_text().splitlines()
+    assert ("WHEEL_SETUP" in calls) == wheel_mode
+    dependency_calls = [call for call in calls if call.startswith("uv:")]
+    if wheel_mode:
+        assert not dependency_calls
+    else:
+        assert "uv:pip install -v --target=python ./3rdparty/tvm-ffi/" in dependency_calls
+
+
+def test_wheel_mode_does_not_fall_back_when_install_fails(tmp_path):
+    scripts = tmp_path / "tests/scripts"
+    scripts.mkdir(parents=True)
+    shutil.copy(ROOT / "tests/scripts/task_python_unittest.sh", scripts)
+    (scripts / "task_python_install_wheels.sh").write_text("return 37\n")
+    result = subprocess.run(
+        [shutil.which("bash"), str(scripts / "task_python_unittest.sh")],
+        cwd=tmp_path,
+        env={**os.environ, "TVM_TEST_USE_WHEEL": "1"},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 37
+    assert "uv pip install" not in result.stderr

@@ -114,3 +114,14 @@ is performed by this change.
 An explicit value wins; otherwise builds use at least one CPU and divide the
 node CPU count by `CI_NUM_EXECUTORS`. Both the wheel backend and specialized
 native commands use that bound without an additional parallel flag.
+
+### Old pipeline compatibility
+
+Jenkins may select the old trusted-main Jenkinsfile while checking out a newer
+PR revision. Retain `tests/scripts/task_build.py`, the original raw-artifact
+bundles, and the source-mode test interfaces until trusted main has migrated.
+The native pipelines and local wheel commands explicitly pass
+`TVM_TEST_USE_WHEEL=1`; only that mode installs wheel artifacts without fetching
+dependencies. Calls without the flag retain the old source setup and dependency
+installation behavior. A missing wheel in wheel mode is an error, not a fallback
+to source mode.

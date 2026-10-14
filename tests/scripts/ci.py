@@ -434,6 +434,7 @@ def generate_command(
 
         docker_env = {
             "TVM_WHEEL_DIR": str(REPO_ROOT / build_dir / "wheels"),
+            "TVM_TEST_USE_WHEEL": "1",
             "VERBOSE": "true" if verbose else "false",
         }
 

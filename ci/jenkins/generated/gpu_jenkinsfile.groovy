@@ -22,7 +22,7 @@ ci.start()
 ci.build('CPU', 'BUILD: GPU', 'tvm/build-gpu', images.ci_gpu, 'gpu') {
   sh "${docker_run} --no-gpu ${images.ci_gpu} ./tests/scripts/task_config_build_gpu.sh build"
   ci.wheel_build("--no-gpu ${images.ci_gpu}")
-  ci.upload('gpu', '--bundle wheels --bundle tvm_runtime')
+  ci.upload('gpu', '--bundle wheels --bundle jvm_runtime')
 
   // Check the compiler-only GPU configuration after publishing the test build.
   sh 'rm -rf build'

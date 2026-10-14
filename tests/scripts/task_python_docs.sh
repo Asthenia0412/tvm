@@ -18,12 +18,15 @@
 
 set -euxo pipefail
 
-# Local docs retain source builds; Jenkins imports the exact build-node wheels.
-if [ "${IS_LOCAL:-0}" != "1" ]; then
+# The native pipeline opts in; old main-selected jobs retain source imports.
+if [ "${TVM_TEST_USE_WHEEL:-0}" = "1" ]; then
     source "$(dirname "$0")/task_python_install_wheels.sh"
     export TVM_DOCS_USE_WHEEL=1
 else
     export PYTHONPATH="$(pwd)/python"
+    unset TVM_DOCS_USE_WHEEL
+    uv pip install -v --target=python ./3rdparty/tvm-ffi/
+    uv pip install --no-deps apache-tvm-ffi-orcjit==0.1.2
 fi
 
 # to avoid CI CPU thread throttling.

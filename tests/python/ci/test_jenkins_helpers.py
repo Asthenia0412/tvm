@@ -19,11 +19,13 @@
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
+import sys
 
 import pytest
 
-from .test_utils import JENKINS_SCRIPT_ROOT
+from .test_utils import JENKINS_SCRIPT_ROOT, REPO_ROOT
 
 
 def load_s3():
@@ -78,3 +80,55 @@ with pathlib.Path(os.environ["SLEEP_LOG"]).open("a") as out:
     delays = (tmp_path / "sleeps").read_text().splitlines()
     assert len(delays) == 4
     assert all(30 <= int(delay) <= 200 for delay in delays)
+
+
+def test_build_environment_and_target(tmp_path):
+    # Run the entry point in a minimal checkout, capturing the tool boundary.
+    script = tmp_path / "tests/scripts/task_build.py"
+    script.parent.mkdir(parents=True)
+    shutil.copy(REPO_ROOT / "tests/scripts/task_build.py", script)
+    (tmp_path / "build").mkdir()
+    executable(
+        tmp_path / "cmake",
+        """
+import json, os, pathlib, sys
+with pathlib.Path(os.environ["COMMAND_LOG"]).open("a") as out:
+    entry = [sys.argv[1:], os.getcwd(), os.environ["SCCACHE_BUCKET"], os.environ["CC"]]
+    out.write(json.dumps(entry) + "\\n")
+""",
+    )
+    executable(tmp_path / "sccache", "pass\n")
+    log = tmp_path / "commands"
+    env = dict(
+        os.environ,
+        PATH=f"{tmp_path}:{os.environ['PATH']}",
+        COMMAND_LOG=str(log),
+        AWS_ACCESS_KEY_ID="test",
+        CI_NUM_EXECUTORS="2",
+        VERBOSE="false",
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            script,
+            "--debug",
+            "--cmake-target",
+            "cpptest",
+            "--sccache-bucket",
+            "test-cache",
+        ],
+        cwd=tmp_path,
+        env=env,
+        check=True,
+    )
+    configure, build = [json.loads(line) for line in log.read_text().splitlines()]
+    assert configure == [
+        ["-GNinja", "-DCMAKE_BUILD_TYPE=Debug", ".."],
+        str(tmp_path / "build"),
+        "test-cache",
+        "/opt/sccache/cc",
+    ]
+    assert build[0][:4] == ["--build", ".", "--", "cpptest"]
+    assert build[0][4].startswith("-j") and int(build[0][4][2:]) >= 1
+    assert len(build[0]) == 5
+    assert build[1:] == configure[1:]

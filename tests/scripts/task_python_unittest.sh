@@ -18,7 +18,14 @@
 
 set -euxo pipefail
 
-source "$(dirname "$0")/task_python_install_wheels.sh"
+if [ "${TVM_TEST_USE_WHEEL:-0}" = "1" ]; then
+    source "$(dirname "$0")/task_python_install_wheels.sh"
+else
+    # Trusted main still invokes this script after transferring native artifacts.
+    export PYTHONPATH="$(pwd)/python"
+    uv pip install -v --target=python ./3rdparty/tvm-ffi/
+    uv pip install --no-deps apache-tvm-ffi-orcjit==0.1.2
+fi
 export PYTEST_ADDOPTS="${CI_PYTEST_ADD_OPTIONS:-} ${PYTEST_ADDOPTS:-}"
 
 python3 -m pytest -vvs -n auto -m "${TVM_TEST_MARKER:-not gpu}" "${@:-tests/python}"
