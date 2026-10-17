@@ -22,6 +22,7 @@
  * \brief Lower frontend-only TIRx IKET annotations to CUDA tracing helpers.
  */
 
+#include <tvm/backend/cuda/attr.h>
 #include <tvm/backend/cuda/op/iket.h>
 #include <tvm/ffi/reflection/registry.h>
 #include <tvm/ir/function.h>
@@ -576,6 +577,8 @@ class StripIket : public StmtExprMutator {
   explicit StripIket(TokenTensorSet token_tensors) : token_tensors_(std::move(token_tensors)) {}
 
  private:
+  using StmtExprMutator::Mutate_;
+
   UnchangedOr<Stmt> Mutate_(const BindNode* alloc, InplaceMode inplace_mode) final {
     if (const auto* call = alloc->value.as<CallNode>(); call &&
                                                         call->op.same_as(tirx::alloc_tensor_op()) &&
@@ -1082,6 +1085,8 @@ class InstrumentOfficialKernel : public StmtExprMutator {
   }
 
  private:
+  using StmtExprMutator::Mutate_;
+
   const Declaration& Lookup(DeclarationKind kind, const CallNode* call) const {
     DeclarationKey key{kind, GetName(call)};
     auto it = info_.declarations.find(key);
@@ -1177,7 +1182,7 @@ class InstrumentOfficialKernel : public StmtExprMutator {
 };
 
 bool IketEnabled(const IRModule& module) {
-  if (module->HasNonzeroAttr(tvm::backend::cuda::attr::kIKetEnabled)) return true;
+  if (module->HasNonzeroAttr(tvm::backend::cuda::attr::kIKetEnabled.name)) return true;
   const char* child_enable = std::getenv("TVM_IKET_INJECTED_CHILD_ENABLE");
   const char* injection = std::getenv("CUDA_INJECTION64_PATH");
   const char* injection_config = std::getenv("IKET_INJECTION_CONFIG");

@@ -112,6 +112,8 @@ class DeviceHelperSpecializer : public StmtExprMutator {
   std::unordered_set<const GlobalVarNode*> originals;
 
  private:
+  using StmtExprMutator::Mutate_;
+
   UnchangedOr<Stmt> Mutate_(const RegionStmtNode* op, InplaceMode inplace_mode) final {
     if (op->op->name != "tirx.device_entry") {
       return StmtExprMutator::Mutate_(op, inplace_mode);
@@ -192,7 +194,7 @@ class HelperCallCollector : public StmtExprVisitor {
 
 Pass SpecializeEntryHelpers() {
   auto transform = [](IRModule mod, PassContext ctx) {
-    IRModule result({}, mod->source_map, mod->attrs, mod->global_infos);
+    IRModule result({}, mod->attrs, mod->global_infos);
     UniqueNameSupply names(mod->functions.begin(), mod->functions.end(),
                            [](const auto& kv) { return kv.first->name_hint; });
     std::unordered_set<const GlobalVarNode*> originals;
@@ -237,7 +239,7 @@ Pass SpecializeEntryHelpers() {
 
 Pass SpecializeDeviceHelpers() {
   auto transform = [](IRModule mod, PassContext ctx) {
-    IRModule result({}, mod->source_map, mod->attrs, mod->global_infos);
+    IRModule result({}, mod->attrs, mod->global_infos);
     UniqueNameSupply names(mod->functions.begin(), mod->functions.end(),
                            [](const auto& kv) { return kv.first->name_hint; });
     std::map<std::string, ffi::ObjectPtr<DeviceHelperSpecializer>> groups;

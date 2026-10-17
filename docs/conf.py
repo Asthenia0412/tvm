@@ -50,8 +50,6 @@ if curr_path.name == "_staging":
 else:
     tvm_path = Path(os.pardir)
 
-sys.path.insert(0, str(tvm_path.resolve() / "python"))
-sys.path.insert(0, str(tvm_path.resolve() / "tirx" / "python"))
 sys.path.insert(0, str(tvm_path.resolve() / "docs"))
 
 # -- General configuration ------------------------------------------------
@@ -365,7 +363,7 @@ html_favicon = "_static/img/tvm-logo-square.png"
 
 # The Apache trademark/copyright footer is rendered through sphinx-book-theme's
 # ``extra_footer`` hook (see footer_html below). This mirrors how the tvm-ffi docs
-# (3rdparty/tvm-ffi/docs/conf.py) preserve the ASF menu under the book theme.
+# (tirx/3rdparty/tvm-ffi/docs/conf.py) preserve the ASF menu under the book theme.
 footer_dropdown = {
     "name": "ASF",
     "items": [

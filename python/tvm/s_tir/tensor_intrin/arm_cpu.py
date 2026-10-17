@@ -21,7 +21,7 @@
 from tvm.s_tir import script as Ts
 from tvm.s_tir.script.ir_builder import function as build_function
 from tvm_tirx import tirx
-from tvm_tirx.codegen import llvm_version_major
+from tvm_tirx.codegen import llvm
 from tvm_tirx.script import tirx as T
 from tvm_tirx.script.ir_builder import IRBuilder
 
@@ -50,7 +50,7 @@ def neon_4x4_i8i8i32_desc(
             for k in T.serial(0, 4):
                 with Ts.sblock("update"):
                     vi, vk = Ts.axis.remap("SR", [i, k])
-                    C[vi] = C[vi] + T.cast(A[vk], "int32") * T.cast(B[vi, vk], "int32")
+                    C[vi] = C[vi] + T.cast(A[vk], ty="int32") * T.cast(B[vi, vk], ty="int32")
 
 
 @Ts.function
@@ -131,8 +131,8 @@ def get_dotprod_intrin(in_dtype, out_dtype):
                 for k in T.serial(0, 4):
                     with Ts.sblock("update"):
                         vi, vk = Ts.axis.remap("SR", [i, k])
-                        C[vi] = C[vi] + T.cast(A[vk], dtype=out_dtype) * T.cast(
-                            B[vi, vk], dtype=out_dtype
+                        C[vi] = C[vi] + T.cast(A[vk], ty=out_dtype) * T.cast(
+                            B[vi, vk], ty=out_dtype
                         )
 
     @Ts.function
@@ -801,7 +801,7 @@ ARM_SME_2SVLx2SVL_GEMM_INTERLEAVED_MOPA = "sme_2svlx2svl_gemm_interleaved_mopa"
 # The following tensor intrinsics use LLVM intrinsics that are only available
 # in versions of LLVM >= 15. Installations with older versions of LLVM will
 # not be able to use them.
-if llvm_version_major() >= 15:
+if llvm.version_major() >= 15:
     TensorIntrin.register(
         ARM_SME_BLOCK2_2SVLx1SVL_FP16_TRANSPOSE_INTERLEAVE,
         *get_sme_transpose_interleave_block2_2svl_fp16_intrin(),

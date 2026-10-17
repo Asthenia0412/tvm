@@ -22,7 +22,7 @@ import logging
 import tvm_ffi
 
 from tvm.s_tir import script as Ts
-from tvm_tirx.codegen import llvm_get_vector_width, target_has_features
+from tvm_tirx.codegen import llvm, target_has_features
 from tvm_tirx.runtime import DataType
 from tvm_tirx.script import tirx as T
 from tvm_tirx.target import Target
@@ -87,7 +87,9 @@ def rvv_vec_dot_product_kernels(
                 for k in T.serial(0, n_elems):
                     with Ts.sblock("update"):
                         vj, vk = Ts.axis.remap("SR", [j, k])
-                        C[vj] = C[vj] + T.cast(A[vk], out_dtype) * T.cast(B[vj, vk], out_dtype)
+                        C[vj] = C[vj] + T.cast(A[vk], ty=out_dtype) * T.cast(
+                            B[vj, vk], ty=out_dtype
+                        )
 
     # LLVM only supports ELEN=32 or ELEN=64
     # https://llvm.org/docs//RISCV/RISCVVectorExtension.html
@@ -184,7 +186,7 @@ def register_rvv_isa_intrinsics(target: Target, inventory_only=False) -> dict():
     if not target_has_features("v", target):
         raise RuntimeError("Current target does not support `v` extension.")
 
-    vlen = llvm_get_vector_width(target)
+    vlen = llvm.get_vector_width(target)
     # get maximum reduction lanes (without grouping)
     n_lanes = get_max_elems(vlen, lmul=1, sew=32)
 

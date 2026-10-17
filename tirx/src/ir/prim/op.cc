@@ -243,6 +243,7 @@ PrimExpr max_value(PrimType value_ty, Location loc) {
     return FloatImm(value_ty, 6.0, loc);
   }
   TVM_FFI_THROW(InternalError) << "Cannot decide max_value for type" << dtype;
+  TVM_FFI_UNREACHABLE();
 }
 
 PrimExpr min_value(PrimType value_ty, Location loc) {
@@ -297,6 +298,7 @@ PrimExpr min_value(PrimType value_ty, Location loc) {
     return FloatImm(value_ty, -6.0, loc);
   }
   TVM_FFI_THROW(InternalError) << "Cannot decide min_value for type" << dtype;
+  TVM_FFI_UNREACHABLE();
 }
 
 PrimExpr cast(PrimExpr value, PrimType t, Location loc) {
@@ -731,12 +733,6 @@ PrimExpr bitwise_neg(PrimExpr a, Location loc) {
   return prim::BitwiseNot(a, loc);
 }
 
-TVM_FFI_STATIC_INIT_BLOCK() {
-  namespace refl = tvm::ffi::reflection;
-  refl::GlobalDef().def("prim.bitwise_not",
-                        [](PrimExpr a, Location loc) { return bitwise_neg(a, loc); });
-}
-
 PrimExpr prim::IntegerAbs(PrimExpr x, Location loc) {
   if (x.ty().MatchesCode(DLDataTypeCode::kDLInt)) {
     if (const IntImmNode* px = x.as<IntImmNode>()) {
@@ -778,7 +774,6 @@ TVM_FFI_STATIC_INIT_BLOCK() {
       .DEF_MAKE_BINARY_OP(_OpSub, sub)
       .DEF_MAKE_BINARY_OP(_OpMul, mul)
       .DEF_MAKE_BINARY_OP(_OpDiv, div)
-      .DEF_MAKE_BINARY_OP(_OpMod, truncmod)
       .DEF_MAKE_BINARY_OP(_OpIndexDiv, indexdiv)
       .DEF_MAKE_BINARY_OP(_OpIndexMod, indexmod)
       .DEF_MAKE_BINARY_OP(_OpFloorDiv, floordiv)
@@ -804,7 +799,7 @@ TVM_FFI_STATIC_INIT_BLOCK() {
 }
 
 // ceil
-PrimExpr ceil(PrimExpr x, Location loc) {
+PrimExpr prim::ceil(PrimExpr x, Location loc) {
   if (x.ty().MatchesCode(DLDataTypeCode::kDLInt, DLDataTypeCode::kDLUInt,
                          DLDataTypeCode::kDLBool)) {
     return x;
@@ -814,7 +809,7 @@ PrimExpr ceil(PrimExpr x, Location loc) {
   return Call(x.ty(), prim::ceil_op(), {x}, {}, {}, loc).as_or_throw<PrimExpr>();
 }
 
-PrimExpr log2(PrimExpr x, Location loc) {
+PrimExpr prim::log2(PrimExpr x, Location loc) {
   PrimType x_ty = x.ty();
   if (x_ty.MatchesElementType(DLDataTypeCode::kDLBfloat, 16)) {
     PrimType f32_ty = x_ty.IsScalableVector() ? PrimType::ScalableVector(DLDataTypeCode::kDLFloat,
@@ -853,7 +848,7 @@ TVM_FFI_STATIC_INIT_BLOCK() {
                             Location loc) { return prim::cast(value, dtype, loc); })
       .def("prim.min_value", static_cast<PrimExpr (*)(PrimType, Location)>(&prim::min_value))
       .def("prim.likely", tvm::likely)
-      .def("prim.ceil", tvm::ceil);
+      .def("prim.ceil", prim::ceil);
 }
 
 }  // namespace tvm

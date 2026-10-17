@@ -33,10 +33,11 @@ from tvm_tirx.ir import (
     Evaluate,
     For,
     ForKind,
+    IntImm,
     Op,
-    PrimType,
     Range,
     SeqStmt,
+    Stmt,
     TensorRegion,
     Var,
 )
@@ -44,7 +45,6 @@ from tvm_tirx.ir.prim import Let
 from tvm_tirx.runtime import DataType, MemoryScope
 from tvm_tirx.script import tirx as T
 from tvm_tirx.sym import Analyzer
-from tvm_tirx.tirx import Function, IntImm
 from tvm_tirx.tirx.layout import TileLayout
 
 
@@ -107,7 +107,7 @@ class Context:
             self.owners["cbx" if name == "cta_id" else name] = var + offset
             # A singleton group coordinate is known without a CUDA index
             # read, including the sole warp in a block smaller than 32 lanes.
-            coordinate = T.int32(0) if extent == 1 else T.cast(index(), "int32") - offset
+            coordinate = T.int32(0) if extent == 1 else T.cast(index(), ty="int32") - offset
             self.bindings.append(Bind(var, coordinate))
         self.repeat = None
         self.repeat_shape = None
@@ -210,7 +210,7 @@ class Context:
     def region(self, name, region, atom_shape, scopes, *, repeat_axes=None, bounds=True):
         return Region(self, name, region, atom_shape, scopes, repeat_axes, bounds)
 
-    def finish(self, statements):
+    def finish(self, statements) -> Stmt:
         body = SeqStmt(
             [
                 Evaluate(s) if not isinstance(s, Bind | SeqStmt) and hasattr(s, "ty") else s
@@ -219,7 +219,7 @@ class Context:
         )
         for var, extent in reversed(list(zip(self.repeat or (), self.repeat_shape or ()))):
             body = For(var, 0, extent, ForKind.UNROLLED, body)
-        return Function([], [*self.bindings, body], ret_type=PrimType("void"))
+        return SeqStmt([*self.bindings, body])
 
 
 class Region:

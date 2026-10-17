@@ -418,7 +418,7 @@ def is_shape_valid_for_cutlass_matmul(
     as well as ND x 2D and 2D x ND. For example, it cannot handle matmul with shape
     (2, 1, 4, 8) x (2, 3, 8, 16), because the batch stride of lhs is not constant.
     """
-    if not isinstance(lhs_shape[-1], tvm_tirx.tirx.expr.IntImm | int):
+    if not isinstance(lhs_shape[-1], tvm_tirx.ir.IntImm | int):
         # Reduction axis must be constant
         return False
 
@@ -874,10 +874,12 @@ def compile_cutlass_module(c_source_module, options):
     compile_options = _get_cutlass_compile_options(**compile_config)
     lib_path = os.path.join(tmp_dir, "cutlass.o")
     logger.info("Compiling generated CUTLASS code")
-    c_source_module.export_library(lib_path, workspace_dir=tmp_dir, **compile_options)
+    tvm_tirx.codegen.Executable(c_source_module).export_library(
+        lib_path, workspace_dir=tmp_dir, **compile_options
+    )
 
     # Recover static library
-    return tvm_tirx.runtime.load_static_library(lib_path, function_names)
+    return tvm_tirx.codegen.load_static_library(lib_path, function_names)
 
 
 def finalize_modules(lib, lib_path="compile.so", tmp_dir="./tmp"):
@@ -904,5 +906,5 @@ def finalize_modules(lib, lib_path="compile.so", tmp_dir="./tmp"):
 
     """
     lib_path = os.path.join(tmp_dir, lib_path)
-    lib.export_library(lib_path, workspace_dir=tmp_dir, cc="nvcc")
+    tvm_tirx.codegen.Executable(lib).export_library(lib_path, workspace_dir=tmp_dir, cc="nvcc")
     return runtime.load_module(lib_path)
