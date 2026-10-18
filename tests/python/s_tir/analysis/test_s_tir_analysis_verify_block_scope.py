@@ -29,7 +29,7 @@ def test_tensor_region_bounds_are_visited():
     data = tvm_tirx.tirx.Var(
         "data", tvm_tirx.ir.PtrType(tvm_tirx.ir.PrimType("int32"), scope="global")
     )
-    tensor = tvm_tirx.tirx.decl_tensor([4], "int32", data=data)
+    tensor = tvm_tirx.tirx.Var("tensor", tvm_tirx.tirx.TensorType([4], "int32", data=data))
     undefined = tvm_tirx.tirx.Var("undefined", "int32")
     region = TensorRegion(
         tensor, [tvm_tirx.ir.Range.from_min_extent(undefined, 4)], ty=TensorRegionType()
@@ -89,7 +89,7 @@ def test_block_match_tensor_defines_symbolic_variables():
                     B = Ts.match_tensor(
                         A[tile_i * 16 : (tile_i + 1) * 16, tile_j * 16 : (tile_j + 1) * 16],
                         dtype="float32",
-                        elem_offset=elem_offset,
+                        layout=T.TileLayout(T.S[(16, 16) : (256, 1)] + elem_offset),
                     )
 
                     B[i, j] = elem_offset
@@ -121,13 +121,13 @@ def test_error_undeclared_tensor_in_schedulable_tir():
     # Manually construct a TensorStore that uses a tensor without any declaration
     # inside a block context.
     n = tvm_tirx.tirx.Var("n", "int32")
-    A = tvm_tirx.tirx.decl_tensor([n], "float32", name="A")
+    A = tvm_tirx.tirx.Var("A", tvm_tirx.tirx.TensorType([n], "float32"))
     i = tvm_tirx.tirx.Var("i", "int32")
 
     # Create an undeclared tensor using an explicit data pointer that is NOT
     # a function parameter and NOT wrapped with DeclTensor.
     B_data = tvm_tirx.tirx.Var("B_data", tvm_tirx.ir.PtrType(tvm_tirx.ir.PrimType("float32")))
-    B = tvm_tirx.tirx.decl_tensor([n], "float32", name="B", data=B_data)
+    B = tvm_tirx.tirx.Var("B", tvm_tirx.tirx.TensorType([n], "float32", data=B_data))
 
     # Build a block that writes to B without any declaration of B.
     bi = tvm_tirx.tirx.Var("bi", "int32")
@@ -135,12 +135,12 @@ def test_error_undeclared_tensor_in_schedulable_tir():
         iter_vars=[tvm.s_tir.IterVar(tvm_tirx.ir.Range(0, n), bi, 0)],  # 0 = kDataPar
         reads=[TensorRegion(A, [tvm_tirx.ir.Range(bi, bi + 1)], ty=TensorRegionType())],
         writes=[TensorRegion(B, [tvm_tirx.ir.Range(bi, bi + 1)], ty=TensorRegionType())],
-        body=tvm_tirx.ir.TensorStore(B, [bi], tvm_tirx.tirx.TensorLoad(A, [bi])),
+        body=tvm_tirx.ir.TensorStore(B, [bi], tvm_tirx.ir.TensorLoad(A, [bi])),
         name_hint="write_B",
     )
     block_realize = tvm.s_tir.SBlockRealize(
         iter_values=[i],
-        predicate=tvm_tirx.tirx.const(True),
+        predicate=tvm_tirx.tirx.const(True, "bool"),
         block=block,
     )
 
@@ -152,7 +152,5 @@ def test_error_undeclared_tensor_in_schedulable_tir():
     )
 
     # B is used in the block but was never declared — should fail.
-    with pytest.raises(
-        (ValueError, tvm_tirx.error.InternalError), match="tensor B.*without a prior DeclTensor"
-    ):
+    with pytest.raises((ValueError, RuntimeError), match="tensor B.*without a prior DeclTensor"):
         tvm.s_tir.analysis.verify_well_formed(function)

@@ -20,10 +20,10 @@ import pytest
 import tvm_ffi
 
 import tvm_tirx
-from tvm_tirx.ir import Call, Op, const
+from tvm_tirx.ir import Call, CallEffectKind, Op, const
+from tvm_tirx.ir.prim.vector_expr import Broadcast
 from tvm_tirx.script import tirx as T
 from tvm_tirx.testing import env
-from tvm_tirx.tirx.expr import Broadcast, CallEffectKind
 
 TARGET = tvm_tirx.target.Target({"kind": "cuda", "arch": env.cuda_arch() or "sm_90"})
 
@@ -225,9 +225,7 @@ def test_ptx_addr_unrolled_expression_and_dynamic_rejection():
                 T.ptx.ld.global_.b32(value, T.ptx.addr(src.data, i * 4))
 
     for func in (thread_dynamic, loop_dynamic):
-        with pytest.raises(
-            (ValueError, tvm_tirx.error.InternalError), match="must become a compile-time"
-        ):
+        with pytest.raises((ValueError, RuntimeError), match="must become a compile-time"):
             _cuda_source(func)
 
 

@@ -26,6 +26,8 @@
 
 #include <tvm/ffi/container/array.h>
 #include <tvm/ffi/container/map.h>
+#include <tvm/ffi/container/tensor.h>
+#include <tvm/ffi/extra/module.h>
 #include <tvm/ffi/extra/structural_equal.h>
 #include <tvm/ffi/extra/structural_hash.h>
 #include <tvm/ffi/reflection/registry.h>
@@ -61,8 +63,6 @@ class IRModuleNode : public ffi::Object {
  public:
   /*! \brief A map from ids to all global functions. */
   ffi::Map<GlobalVar, BaseFunc> functions;
-  /*! \brief The source map for the module. */
-  SourceMap source_map;
   /* \brief Additional attributes storing meta-data about the module. */
   DictAttrs attrs;
   /*! \brief Globally static object that are referred by the IR itself */
@@ -150,14 +150,13 @@ class IRModuleNode : public ffi::Object {
    */
   bool HasNonzeroAttr(const std::string& attr_key) const { return attrs.HasNonzeroAttr(attr_key); }
 
-  IRModuleNode() : source_map() {}
+  IRModuleNode() = default;
 
   static void RegisterReflection() {
     namespace refl = tvm::ffi::reflection;
     refl::ObjectDef<IRModuleNode>()
         .def_ro("functions", &IRModuleNode::functions)
         .def_ro("global_var_map_", &IRModuleNode::global_var_map_)
-        .def_ro("source_map", &IRModuleNode::source_map)
         .def_ro("attrs", &IRModuleNode::attrs)
         .def_ro("global_infos", &IRModuleNode::global_infos);
     // register custom structural equal and hash.
@@ -256,10 +255,6 @@ class IRModuleNode : public ffi::Object {
    * \returns The shallow copy of the IRModule.
    */
   TVM_TIRX_DLL IRModule ShallowCopy();
-  /*!
-   * \brief The set of imported files.
-   */
-  TVM_TIRX_DLL std::unordered_set<ffi::String> Imports() const;
 
   static constexpr TVMFFISEqHashKind _type_s_eq_hash_kind = kTVMFFISEqHashKindTreeNode;
 
@@ -279,11 +274,10 @@ class IRModule : public ffi::ObjectRef {
   /*!
    * \brief constructor
    * \param functions Functions in the module.
-   * \param map The module source map.
    * \param attrs The module meta-data attributes.
    * \param global_infos Global infos in the module.
    */
-  TVM_TIRX_DLL explicit IRModule(ffi::Map<GlobalVar, BaseFunc> functions, SourceMap map = {},
+  TVM_TIRX_DLL explicit IRModule(ffi::Map<GlobalVar, BaseFunc> functions,
                                  DictAttrs attrs = DictAttrs(),
                                  ffi::Map<ffi::String, ffi::Array<GlobalInfo>> global_infos = {});
 
@@ -311,13 +305,6 @@ class IRModule : public ffi::ObjectRef {
   TVM_TIRX_DLL static IRModule FromExpr(const Expr& expr,
                                         const ffi::Map<GlobalVar, BaseFunc>& global_funcs = {});
 
-  /*!
-   * \brief Create a shallow copy of an IRModule.
-   * \param mod The module to copy.
-   * \return The copied module.
-   */
-  IRModule ShallowCopyIRModule(IRModule mod);
-
   /*! \brief Declare the container type. */
   using ContainerType = IRModuleNode;
 
@@ -330,19 +317,12 @@ namespace attr {
 // Following are attributes for IRModule only.
 
 /*!
- * \brief Name of the module
- *
- * Type: String
- */
-constexpr const char* kModuleName = "mod_name";
-
-/*!
  * \brief All the runtime::Modules accumulated during compilation by external codegen. These
  * modules must be either directly linked or captured in the final compilation artifact.
  *
  * Type: ffi::Array<runtime::Module>
  */
-constexpr const char* kExternalMods = "external_mods";
+inline constexpr ffi::reflection::AttrKey<ffi::Array<ffi::Module>> kExternalMods{"external_mods"};
 
 /*!
  * \brief A prefix for generating C symbols  system lib creation.
@@ -371,7 +351,7 @@ constexpr const char* kExternalMods = "external_mods";
  *
  * Having this attribute implies system lib generation linkage.
  */
-constexpr const char* kSystemLibPrefix = "system_lib_prefix";
+inline constexpr ffi::reflection::AttrKey<ffi::String> kSystemLibPrefix{"system_lib_prefix"};
 
 /*!
  * \brief All the named Tensors accumulated during compilation by external codegen.
@@ -380,9 +360,11 @@ constexpr const char* kSystemLibPrefix = "system_lib_prefix";
  *
  * Type: ffi::Map<ffi::String, Tensor>
  */
-constexpr const char* kConstNameToConstant = "const_name_to_constant";
+inline constexpr ffi::reflection::AttrKey<ffi::Map<ffi::String, ffi::Tensor>> kConstNameToConstant{
+    "const_name_to_constant"};
 
-constexpr const char* kDeviceContexts = "device_contexts";
+inline constexpr ffi::reflection::AttrKey<ffi::Map<GlobalVar, ffi::String>> kDeviceContexts{
+    "device_contexts"};
 
 }  // namespace attr
 }  // namespace tvm

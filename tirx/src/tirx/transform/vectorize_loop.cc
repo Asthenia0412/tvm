@@ -34,9 +34,9 @@
 #include <tvm/sym/analyzer.h>
 #include <tvm/tirx/analysis.h>
 #include <tvm/tirx/op/abi.h>
+#include <tvm/tirx/op/attr.h>
 #include <tvm/tirx/op/memory.h>
 #include <tvm/tirx/op/vector.h>
-#include <tvm/tirx/op_attr_types.h>
 #include <tvm/tirx/stmt_functor.h>
 #include <tvm/tirx/transform.h>
 
@@ -219,6 +219,8 @@ class TryPredicateTensorAccesses : public StmtExprMutator {
   }
 
  private:
+  using StmtExprMutator::Mutate_;
+
   UnchangedOr<PrimExpr> Mutate_(const TensorLoadNode* op, InplaceMode inplace_mode) final {
     auto load = StmtExprMutator::Mutate_(op, inplace_mode)
                     .ValueOrUnchanged(ffi::GetRef<PrimExpr>(op))
@@ -340,6 +342,8 @@ class TryPredicateTensorAccesses : public StmtExprMutator {
 //
 class VecAllocAccess : public StmtExprMutator {
  public:
+  using StmtExprMutator::Mutate_;
+
   VecAllocAccess(const VarNode* buf, Var var, PrimExpr var_lanes)
       : buf_(buf), var_(var), var_lanes_(var_lanes) {}
 
@@ -391,21 +395,10 @@ class VecAllocAccess : public StmtExprMutator {
       // flattening, the strides are not technically necessary, but
       // are updated for consistency.
 
-      // Update strides if defined.
-      ffi::Array<PrimExpr> strides = node->dest.template as_or_throw<TensorVar>().strides();
-      for (size_t i = 0; i < strides.size(); i++) {
-        PrimExpr stride = strides[i];
-        if (i != strides.size() - 1) {
-          stride *= var_lanes_;
-        }
-        strides.Set(i, analyzer_->Simplify(stride));
-      }
-
-      // Copy everything into the new tensor.
       auto type = ffi::make_object<TensorTypeNode>(
           *node->dest.template as_or_throw<TensorVar>().ty().get());
+      WidenLayout(type.get(), shape);
       type->shape = shape;
-      type->strides = strides;
       buf =
           TensorVar(node->dest.template as_or_throw<TensorVar>()->name, TensorType(std::move(type)),
                     node->dest.template as_or_throw<TensorVar>()->loc);
@@ -434,15 +427,9 @@ class VecAllocAccess : public StmtExprMutator {
     } else {
       ffi::Array<PrimExpr> shape = tensor.shape();
       shape.Set(shape.size() - 1, analyzer_->Simplify(shape.back() * var_lanes_));
-      ffi::Array<PrimExpr> strides = tensor.strides();
-      for (size_t i = 0; i < strides.size(); ++i) {
-        PrimExpr stride = strides[i];
-        if (i + 1 != strides.size()) stride *= var_lanes_;
-        strides.Set(i, analyzer_->Simplify(stride));
-      }
       auto type = ffi::make_object<TensorTypeNode>(*tensor.ty().get());
+      WidenLayout(type.get(), shape);
       type->shape = shape;
-      type->strides = strides;
       buf = TensorVar(tensor->name, TensorType(std::move(type)), tensor->loc);
       VarRemapSet(tensor, buf);
     }
@@ -450,6 +437,23 @@ class VecAllocAccess : public StmtExprMutator {
     indices.Set(indices.size() - 1,
                 analyzer_->Simplify(indices.back() * var_lanes_ + var_.as_or_throw<PrimExpr>()));
     return TensorLoad(buf, indices, node->loc);
+  }
+
+  void WidenLayout(TensorTypeNode* type, const ffi::Array<PrimExpr>& shape) {
+    if (!type->layout.has_value()) return;
+    auto tile = type->layout.value().as_or_throw<TileLayout>();
+    TVM_FFI_CHECK(
+        MatchShapeStridePattern(TensorType(ffi::make_object<TensorTypeNode>(*type))).has_value(),
+        ValueError)
+        << "Vectorized allocation requires a regular memory layout";
+    ffi::Array<Iter> shard;
+    for (size_t i = 0; i < tile->shard.size(); ++i) {
+      PrimExpr stride = tile->shard[i]->stride;
+      if (i + 1 != tile->shard.size()) stride *= var_lanes_;
+      shard.push_back(Iter(shape[i], analyzer_->Simplify(stride), Axis::Get("m")));
+    }
+    tile.CopyOnWrite()->shard = std::move(shard);
+    type->layout = tile;
   }
 
   // tensor var
@@ -718,11 +722,12 @@ class Vectorizer : public StmtExprMutator {
       return ffi::Unchanged();
     } else {
       if (value.ty().IsScalableVector()) {
-        return prim::Cast(value, PrimType::ScalableVector(op->ty.as_or_throw<PrimType>().code(),
-                                                          op->ty.as_or_throw<PrimType>().bits(),
-                                                          value.ty().VScaleFactor()));
+        return prim::Cast(PrimType::ScalableVector(op->ty.as_or_throw<PrimType>().code(),
+                                                   op->ty.as_or_throw<PrimType>().bits(),
+                                                   value.ty().VScaleFactor()),
+                          value);
       } else {
-        return prim::Cast(value, op->ty.as_or_throw<PrimType>().WithLanes(value.ty().lanes()));
+        return prim::Cast(op->ty.as_or_throw<PrimType>().WithLanes(value.ty().lanes()), value);
       }
     }
   }
@@ -1335,7 +1340,7 @@ Stmt PreserveUnrollPolicy(Stmt body, const ffi::Map<ffi::String, ffi::Any>& anno
     }
   };
   auto transfer = ffi::make_object<PolicyTransfer>();
-  for (const char* key : {attr::kAutoUnrollMaxStep, attr::kUnrollExplicit}) {
+  for (const char* key : {attr::kAutoUnrollMaxStep.name, attr::kUnrollExplicit.name}) {
     if (auto value = annotations.Get(key); value.has_value() && value.value() != nullptr) {
       transfer->policy.Set(key, value.value());
     }
@@ -1352,7 +1357,7 @@ class LoopVectorizer : public StmtExprMutator {
     return StmtExprMutator::Mutate(value, inplace_mode);
   }
 
-  explicit LoopVectorizer(DictAttrs attrs) : target_(attrs.GetAttr<Target>(tvm::attr::kTarget)) {}
+  explicit LoopVectorizer(DictAttrs attrs) : target_(attrs.GetAttr(tvm::attr::kTarget)) {}
 
   UnchangedOr<Stmt> Mutate_(const ForNode* op, InplaceMode inplace_mode) final {
     if (op->kind == ForKind::kVectorized) {
@@ -1400,7 +1405,7 @@ class LoopVectorizer : public StmtExprMutator {
     PrimType lane_dtype = scalable_lanes.ty();
     PrimExpr scalable_lanes_index = scalable_lanes;
     if (scalable_lanes_index.ty() != index_dtype) {
-      scalable_lanes_index = prim::Cast(scalable_lanes_index, index_dtype);
+      scalable_lanes_index = prim::Cast(index_dtype, scalable_lanes_index);
     }
     PrimExpr num_chunks = ceildiv(fixed_extent, scalable_lanes_index);
 
@@ -1408,7 +1413,7 @@ class LoopVectorizer : public StmtExprMutator {
     PrimVar inner(op->loop_var->name + ".vla.i", lane_dtype);
     PrimExpr inner_index = inner;
     if (inner_index.ty() != index_dtype) {
-      inner_index = prim::Cast(inner_index, index_dtype);
+      inner_index = prim::Cast(index_dtype, inner_index);
     }
     PrimExpr index = outer * scalable_lanes_index + inner_index;
     auto substituter = ffi::make_object<StmtExprMutator>();

@@ -49,7 +49,7 @@ def find_lld(required=True):
     matches the major llvm version that built with tvm
     """
     lld_list = []
-    major = tvm_tirx.codegen.llvm_version_major(allow_none=True)
+    major = tvm_tirx.codegen.llvm.version_major(allow_none=True)
     if major is not None:
         lld_list += [f"ld.lld-{major}.0"]
         lld_list += [f"ld.lld-{major}"]
@@ -174,7 +174,7 @@ def callback_rocm_bitcode_path(rocdl_dir=None):
         elif "isa_version" not in n and n not in {"irif"}:
             raise RuntimeError("could not find bitcode " + n)
 
-    return tvm_tirx.runtime.convert(bitcode_files)
+    return tvm_ffi.convert(bitcode_files)
 
 
 def parse_compute_version(compute_version):

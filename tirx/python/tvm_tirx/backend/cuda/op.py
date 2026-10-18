@@ -24,11 +24,10 @@ from functools import cache
 
 import tvm_ffi
 
-from tvm_tirx import DataType, tirx
+from tvm_tirx import tirx
 from tvm_tirx.ir import Attrs, Call, Op, StringImm, const
 from tvm_tirx.ir.location import UNKNOWN_LOC, Location
 from tvm_tirx.ir.op import _init_op_api, _make_op_api
-from tvm_tirx.ir.type import PrimType, PtrType
 from tvm_tirx.runtime import MemoryScope
 from tvm_tirx.tirx.op import bitwise_and, call_intrin, ptr_byte_offset
 
@@ -45,7 +44,10 @@ def _tmem_address(tensor):
     """Recover the encoded 32-bit address from an explicit TMEM backing pointer."""
     if tensor.scope() != _scope_tmem():
         raise ValueError("Expected a TMEM tensor")
-    return tirx.Cast(tirx.reinterpret("uint64", tensor.data), "uint32")
+    return tirx.Cast(
+        "uint32",
+        tirx.reinterpret(tensor.data, ty="uint64"),
+    )
 
 
 ########################################################
@@ -53,53 +55,53 @@ def _tmem_address(tensor):
 ########################################################
 
 
-def cuda_iket_mark(name, payload=None):
+def iket_mark(name, payload=None):
     """Create an NVIDIA IKET marker annotation."""
     if payload is not None:
-        return call_intrin("", "tirx.cuda.iket_mark", name, payload)
-    return call_intrin("", "tirx.cuda.iket_mark", name)
+        return call_intrin("tirx.cuda.iket_mark", name, payload, ty="")
+    return call_intrin("tirx.cuda.iket_mark", name, ty="")
 
 
-def cuda_iket_range_start(name, payload=None):
+def iket_range_start(name, payload=None):
     """Create an NVIDIA IKET token-range start annotation."""
     if payload is not None:
-        return call_intrin("uint32", "tirx.cuda.iket_range_start", name, payload)
-    return call_intrin("uint32", "tirx.cuda.iket_range_start", name)
+        return call_intrin("tirx.cuda.iket_range_start", name, payload, ty="uint32")
+    return call_intrin("tirx.cuda.iket_range_start", name, ty="uint32")
 
 
-def cuda_iket_range_end(token, payload=None):
+def iket_range_end(token, payload=None):
     """Create an NVIDIA IKET token-range end annotation."""
     if payload is not None:
-        return call_intrin("", "tirx.cuda.iket_range_end", token, payload)
-    return call_intrin("", "tirx.cuda.iket_range_end", token)
+        return call_intrin("tirx.cuda.iket_range_end", token, payload, ty="")
+    return call_intrin("tirx.cuda.iket_range_end", token, ty="")
 
 
-def cuda_iket_range_push(name, payload=None):
+def iket_range_push(name, payload=None):
     """Create an NVIDIA IKET stack-range push annotation."""
     if payload is not None:
-        return call_intrin("", "tirx.cuda.iket_range_push", name, payload)
-    return call_intrin("", "tirx.cuda.iket_range_push", name)
+        return call_intrin("tirx.cuda.iket_range_push", name, payload, ty="")
+    return call_intrin("tirx.cuda.iket_range_push", name, ty="")
 
 
-def cuda_iket_official_event(event_id, source_code="", payload=None):
+def iket_official_event(event_id, source_code="", payload=None):
     """Create an NVIDIA IKET official range-end event."""
     if payload is not None:
         return call_intrin(
-            "uint32", "tirx.cuda.iket_official_event", event_id, source_code, payload
+            "tirx.cuda.iket_official_event", event_id, source_code, payload, ty="uint32"
         )
-    return call_intrin("uint32", "tirx.cuda.iket_official_event", event_id, source_code)
+    return call_intrin("tirx.cuda.iket_official_event", event_id, source_code, ty="uint32")
 
 
-def cuda_func_call(func_name, *args, ty=None, loc: Location = UNKNOWN_LOC):
+def func_call(func_name, *args, ty=None, loc: Location = UNKNOWN_LOC):
     """Call a CUDA function with its source code as the final operand.
 
     ``args`` contains the function arguments followed by the source string.
     ``ty`` specifies an explicit result; omitted results are void.
     """
-    return Call("tirx.cuda.func_call", [func_name, *args], ty=ty, loc=loc)
+    return Call("tirx.cuda.func_call", [func_name, *args], loc=loc, ty=ty)
 
 
-def cuda_warp_reduce(value, op, width=32, *, ty=None, loc: Location = UNKNOWN_LOC):
+def warp_reduce(value, op, width=32, *, ty=None, loc: Location = UNKNOWN_LOC):
     """Warp-level butterfly shuffle-XOR reduction.
 
     Reduces ``value`` across ``width`` adjacent lanes using the specified
@@ -126,27 +128,27 @@ def cuda_warp_reduce(value, op, width=32, *, ty=None, loc: Location = UNKNOWN_LO
     return Call(
         "tirx.cuda.warp_reduce",
         [value, op, width],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
-def cuda_warp_sum(value, width=32):
-    """Convenience wrapper: ``cuda_warp_reduce(value, "sum", width)``."""
-    return cuda_warp_reduce(value, "sum", width)
+def warp_sum(value, width=32):
+    """Convenience wrapper: ``warp_reduce(value, "sum", width)``."""
+    return warp_reduce(value, "sum", width)
 
 
-def cuda_warp_max(value, width=32):
-    """Convenience wrapper: ``cuda_warp_reduce(value, "max", width)``."""
-    return cuda_warp_reduce(value, "max", width)
+def warp_max(value, width=32):
+    """Convenience wrapper: ``warp_reduce(value, "max", width)``."""
+    return warp_reduce(value, "max", width)
 
 
-def cuda_warp_min(value, width=32):
-    """Convenience wrapper: ``cuda_warp_reduce(value, "min", width)``."""
-    return cuda_warp_reduce(value, "min", width)
+def warp_min(value, width=32):
+    """Convenience wrapper: ``warp_reduce(value, "min", width)``."""
+    return warp_reduce(value, "min", width)
 
 
-def cuda_cta_reduce(value, op, num_warps, scratch, *, ty=None, loc: Location = UNKNOWN_LOC):
+def cta_reduce(value, op, num_warps, scratch, *, ty=None, loc: Location = UNKNOWN_LOC):
     """CTA-wide reduction via warp shuffle + shared memory.
 
     Two-step reduction: (1) intra-warp shuffle reduction, (2) warp-0
@@ -175,24 +177,24 @@ def cuda_cta_reduce(value, op, num_warps, scratch, *, ty=None, loc: Location = U
     return Call(
         "tirx.cuda.cta_reduce",
         [value, op, num_warps, scratch],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
-def cuda_cta_sum(value, num_warps, scratch):
-    """Convenience wrapper: ``cuda_cta_reduce(value, "sum", num_warps, scratch)``."""
-    return cuda_cta_reduce(value, "sum", num_warps, scratch)
+def cta_sum(value, num_warps, scratch):
+    """Convenience wrapper: ``cta_reduce(value, "sum", num_warps, scratch)``."""
+    return cta_reduce(value, "sum", num_warps, scratch)
 
 
-def cuda_cta_max(value, num_warps, scratch):
-    """Convenience wrapper: ``cuda_cta_reduce(value, "max", num_warps, scratch)``."""
-    return cuda_cta_reduce(value, "max", num_warps, scratch)
+def cta_max(value, num_warps, scratch):
+    """Convenience wrapper: ``cta_reduce(value, "max", num_warps, scratch)``."""
+    return cta_reduce(value, "max", num_warps, scratch)
 
 
-def cuda_cta_min(value, num_warps, scratch):
-    """Convenience wrapper: ``cuda_cta_reduce(value, "min", num_warps, scratch)``."""
-    return cuda_cta_reduce(value, "min", num_warps, scratch)
+def cta_min(value, num_warps, scratch):
+    """Convenience wrapper: ``cta_reduce(value, "min", num_warps, scratch)``."""
+    return cta_reduce(value, "min", num_warps, scratch)
 
 
 _WAIT_UNTIL_SCOPE = ("cta", "cluster", "gpu", "sys")
@@ -204,7 +206,6 @@ _WAIT_UNTIL_SCOPE = ("cta", "cluster", "gpu", "sys")
 # allocation address out of a mailbox -- are ordinary reads after a barrier,
 # with no spin and no predicate, so they are not protocols at all.
 _WAIT_UNTIL_SPACE = ("global",)
-_WAIT_UNTIL_DTYPE = ("int32", "uint32", "int64", "uint64")
 # Widths, so a requested PTX type can be checked against the word it accesses.
 # Which spellings an instruction actually takes is the instruction table's
 # business: `add` has no `.b32` form, so a bit-typed arrival is rejected there
@@ -256,7 +257,7 @@ def _reject_wide_word_for_predicate(ptx_type, what):
         )
 
 
-def cuda_wait_until(
+def wait_until(
     dst,
     ptr,
     predicate,
@@ -338,27 +339,9 @@ def cuda_wait_until(
             ptx_type or "",
             tirx.convert(0 if backoff_ns is None else backoff_ns),
         ],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
-
-
-_MBARRIER_ARRIVE_SEM = ("", "release", "relaxed")
-_MBARRIER_ARRIVE_SCOPE = ("", "cta", "cluster")
-_MBARRIER_ARRIVE_SPACE = ("shared", "shared::cta", "shared::cluster")
-
-
-def _validate_mbarrier_arrive_attrs(sem, scope, space, remote):
-    if (sem == "") != (scope == ""):
-        raise ValueError("mbarrier.arrive sem and scope must be specified together")
-    if sem not in _MBARRIER_ARRIVE_SEM:
-        raise ValueError(f"invalid sem={sem!r}; expected one of {_MBARRIER_ARRIVE_SEM}")
-    if scope not in _MBARRIER_ARRIVE_SCOPE:
-        raise ValueError(f"invalid scope={scope!r}; expected one of {_MBARRIER_ARRIVE_SCOPE}")
-    if space not in _MBARRIER_ARRIVE_SPACE:
-        raise ValueError(f"invalid space={space!r}; expected one of {_MBARRIER_ARRIVE_SPACE}")
-    if remote is not None and space != "shared::cluster":
-        raise ValueError("remote mbarrier.arrive requires space='shared::cluster'")
 
 
 _cp_async_raw = _make_op_api(Op.get("tirx.s_tir.cp_async_raw"), __name__)
@@ -379,23 +362,14 @@ def ptx_cp_async_legacy(
 
     ``elem_dtype`` scales element offsets independently of the call's result ``ty``.
     """
-    dtype = DataType(elem_dtype)
+    dtype = tvm_ffi.dtype(elem_dtype)
     elem_bits = dtype.bits * dtype.lanes
     dst_ptr = ptr_byte_offset(dst_ptr, dst_offset * elem_bits // 8, ty=dst_ptr.ty)
     src_ptr = ptr_byte_offset(src_ptr, src_offset * elem_bits // 8, ty=src_ptr.ty)
     return _cp_async_raw(dst_ptr, 0, src_ptr, 0, cp_size, ty=ty, loc=loc)
 
 
-def _is_static_unicast_cta_mask(cta_mask):
-    if isinstance(cta_mask, int):
-        return cta_mask == 0 or cta_mask & (cta_mask - 1) == 0
-    if isinstance(cta_mask, tirx.IntImm):
-        value = int(cta_mask)
-        return value == 0 or value & (value - 1) == 0
-    return False
-
-
-def cuda_mov_sreg(bits, reg_name, *, ty=None, loc: Location = UNKNOWN_LOC):
+def mov_sreg(bits, reg_name, *, ty=None, loc: Location = UNKNOWN_LOC):
     """TVM intrinsic to tvm instrinsics to fetch PTX pre-defined registers
 
     Parameters
@@ -414,8 +388,8 @@ def cuda_mov_sreg(bits, reg_name, *, ty=None, loc: Location = UNKNOWN_LOC):
     return Call(
         "tirx.cuda.mov_sreg",
         [bits, reg_name],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -509,7 +483,6 @@ def bmma_sync(
         The call expression.
     """
     return call_intrin(
-        ty,
         "tirx.cuda.bmma_sync",
         fragment_d,
         index_d,
@@ -520,45 +493,20 @@ def bmma_sync(
         fragment_c,
         index_c,
         loc=loc,
+        ty=ty,
     )
 
 
-def mma_store(dtype, m, n, dst_ptr, src_ptr, src_offset, dst_stride):
+def mma_store(m, n, dst_ptr, src_ptr, src_offset, dst_stride, *, ty):
     """Store the result of PTX MMA into a destination pointer."""
 
-    return call_intrin(dtype, "tirx.cuda.mma_store", m, n, dst_ptr, src_ptr, src_offset, dst_stride)
+    return call_intrin("tirx.cuda.mma_store", m, n, dst_ptr, src_ptr, src_offset, dst_stride, ty=ty)
 
 
-def mma_fill(dtype, local_size, local_ptr, offset):
+def mma_fill(local_size, local_ptr, offset, *, ty):
     """Zero-initialize an MMA accumulation register."""
 
-    return call_intrin(dtype, "tirx.cuda.mma_fill", local_size, local_ptr, offset)
-
-
-_PTX_TO_NUMPY_DTYPE = {
-    "fp16": "float16",
-    "fp32": "float32",
-    "fp64": "float64",
-    "bf16": "bfloat16",
-    "tf32": "float32",
-    "s8": "int8",
-    "u8": "uint8",
-    "s32": "int32",
-    "s4": "int4",
-    "u4": "uint4",
-    "b1": "int1",
-    "b16": "uint16",
-    "e4m3": "float8_e4m3fn",
-    "e5m2": "float8_e5m2",
-}
-
-
-def _ptx_to_numpy_dtype(dtype_str):
-    """Map a PTX-abbreviation or numpy dtype string to a numpy dtype string
-    used by the legacy intrinsic wrappers. Unknown strings pass through unchanged
-    so a caller may also pass an already-numpy dtype."""
-    s = dtype_str if isinstance(dtype_str, str) else str(dtype_str)
-    return _PTX_TO_NUMPY_DTYPE.get(s, s)
+    return call_intrin("tirx.cuda.mma_fill", local_size, local_ptr, offset, ty=ty)
 
 
 _legacy_ldmatrix = _make_op_api(Op.get("tirx.ptx_legacy.ldmatrix"), __name__)
@@ -615,7 +563,7 @@ _encode_instr_descriptor_block_scaled = _make_op_api(
 )
 
 
-def cuda_tcgen05_encode_instr_descriptor(
+def tcgen05_encode_instr_descriptor(
     desc,
     *,
     d_dtype,
@@ -699,7 +647,7 @@ def cuda_tcgen05_encode_instr_descriptor(
     )
 
 
-def cuda_tcgen05_encode_instr_descriptor_block_scaled(
+def tcgen05_encode_instr_descriptor_block_scaled(
     desc,
     *,
     d_dtype,
@@ -856,8 +804,8 @@ def timer_init(
     return Call(
         "tirx.cuda.timer_init",
         [profiler_buffer, profiler_tag, profiler_write_offset, num_groups, group_id],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -911,8 +859,8 @@ def timer_start(
             profiler_write_stride,
             leader_cond,
         ],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -966,8 +914,8 @@ def timer_end(
             profiler_write_stride,
             leader_cond,
         ],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1010,12 +958,12 @@ def timer_finalize(
     return Call(
         "tirx.cuda.timer_finalize",
         [profiler_buffer, profiler_tag, profiler_write_offset, profiler_write_stride, leader_cond],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
-def cuda_atomic_add(res_addr, value, *, ty=None, loc: Location = UNKNOWN_LOC):
+def atomic_add(res_addr, value, *, ty=None, loc: Location = UNKNOWN_LOC):
     """TVM intrinsic to call cuda atomic add instruction
 
     Parameters
@@ -1035,12 +983,12 @@ def cuda_atomic_add(res_addr, value, *, ty=None, loc: Location = UNKNOWN_LOC):
     return Call(
         "tirx.cuda.atomic_add",
         [res_addr, value],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
-def cuda_sm100_2sm_leader_smem_addr(ptr):
+def sm100_2sm_leader_smem_addr(ptr):
     """Return the SM100 2SM leader CTA shared-address operand.
 
     The input is a generic pointer to shared memory.
@@ -1048,127 +996,7 @@ def cuda_sm100_2sm_leader_smem_addr(ptr):
     return bitwise_and(globals()["cvta_generic_to_shared"](ptr), const(0xFEFFFFFF, dtype="uint32"))
 
 
-_PTX_CVT_TYPES = {
-    "u8",
-    "u16",
-    "u32",
-    "u64",
-    "s8",
-    "s16",
-    "s32",
-    "s64",
-    "bf16",
-    "f16",
-    "f32",
-    "f64",
-    "f16x2",
-    "bf16x2",
-    "tf32",
-    "e4m3x2",
-    "e5m2x2",
-    "e2m1x2",
-    "e2m3x2",
-    "e3m2x2",
-    "e4m3x4",
-    "e5m2x4",
-    "e2m1x4",
-    "e2m3x4",
-    "e3m2x4",
-    "ue8m0x2",
-    "s2f6x2",
-}
-_PTX_CVT_ROUNDING = {"", "rni", "rzi", "rmi", "rpi", "rn", "rz", "rm", "rp", "rna", "rs"}
-_PTX_CVT_SCALED = {"", "n2::ue8m0"}
-_PTX_CVT_RETURN_TYPE = {
-    "u8": "uint8",
-    "s8": "int8",
-    "u16": "uint16",
-    "s16": "int16",
-    "u32": "uint32",
-    "s32": "int32",
-    "u64": "uint64",
-    "s64": "int64",
-    "f32": "float32",
-    "f64": "float64",
-    "f16": "uint16",
-    "bf16": "uint16",
-    "e4m3x2": "uint16",
-    "e5m2x2": "uint16",
-    "e2m1x2": "uint8",
-    "e2m3x2": "uint16",
-    "e3m2x2": "uint16",
-    "ue8m0x2": "uint16",
-    "s2f6x2": "uint16",
-    "tf32": "uint32",
-    "f16x2": "uint32",
-    "bf16x2": "uint32",
-    "e2m1x4": "uint16",
-    "e4m3x4": "uint32",
-    "e5m2x4": "uint32",
-    "e2m3x4": "uint32",
-    "e3m2x4": "uint32",
-}
-
-
-_CP_ASYNC_BULK_CACHE_HINT = ("", "evict_last", "evict_first", "evict_normal", "evict_last_use")
-
-_PTX_CACHE_POLICY = {
-    "evict_normal": 0x1000000000000000,
-    "evict_first": 0x12F0000000000000,
-    "evict_last": 0x14F0000000000000,
-}
-
-
-def _resolve_cache_policy(cache_hint, cache_policy, choices=_CP_ASYNC_BULK_CACHE_HINT):
-    _choice("cache_hint", cache_hint, choices)
-    if cache_policy is not None:
-        return cache_policy, True
-    if cache_hint:
-        if cache_hint not in _PTX_CACHE_POLICY:
-            raise ValueError(
-                f"Unsupported built-in cache policy {cache_hint!r}; pass cache_policy explicitly"
-            )
-        return const(_PTX_CACHE_POLICY[cache_hint], dtype="uint64"), True
-    return const(0, dtype="uint64"), False
-
-
-def _ptx_vec_len(vec):
-    return int(vec[1:]) if vec else 1
-
-
-def _normalize_ptx_ld_dst(dst, vec, op_name):
-    if dst is None:
-        if vec:
-            raise ValueError(f"vec {op_name} requires dst")
-        return [], 0
-    if isinstance(dst, list | tuple):
-        if not vec:
-            raise ValueError(f"{op_name} scatter dst requires vec")
-        vec_len = _ptx_vec_len(vec)
-        if len(dst) != vec_len:
-            raise ValueError(f"{op_name} scatter dst length must match {vec}: got {len(dst)}")
-        return list(dst), vec_len
-    return [dst], 1
-
-
-def _validate_ptx_address(addr, space, op_name):
-    """Validate pointer and raw shared-memory address forms."""
-    addr_ty = getattr(addr, "ty", None)
-    if isinstance(addr_ty, PtrType):
-        return
-    if isinstance(addr_ty, PrimType):
-        if addr_ty.dtype == "uint32":
-            if not str(space).startswith("shared"):
-                raise ValueError(f"{op_name} uint32 address requires shared state space")
-            return
-        if addr_ty.dtype.startswith(("int", "uint")):
-            raise ValueError(
-                f"{op_name} integer address must be uint32 in shared state space, "
-                f"got {addr_ty.dtype}"
-            )
-
-
-def cuda_atomic_cas(ptr, old_val, new_val, *, ty=None, loc: Location = UNKNOWN_LOC):
+def atomic_cas(ptr, old_val, new_val, *, ty=None, loc: Location = UNKNOWN_LOC):
     """TVM intrinsic to call cuda atomic cas instruction
 
     Parameters
@@ -1191,8 +1019,8 @@ def cuda_atomic_cas(ptr, old_val, new_val, *, ty=None, loc: Location = UNKNOWN_L
     return Call(
         "tirx.cuda.atomic_cas",
         [ptr, old_val, new_val],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1210,7 +1038,7 @@ def nvshmem_my_pe(*, ty=None, loc: Location = UNKNOWN_LOC):
         The call expression.
     """
 
-    return Call("tirx.nvshmem.my_pe", [], ty=ty, loc=loc)
+    return Call("tirx.nvshmem.my_pe", [], loc=loc, ty=ty)
 
 
 def nvshmem_n_pes(*, ty=None, loc: Location = UNKNOWN_LOC):
@@ -1222,7 +1050,7 @@ def nvshmem_n_pes(*, ty=None, loc: Location = UNKNOWN_LOC):
         The call expression.
     """
 
-    return Call("tirx.nvshmem.n_pes", [], ty=ty, loc=loc)
+    return Call("tirx.nvshmem.n_pes", [], loc=loc, ty=ty)
 
 
 def nvshmem_getmem_nbi(dst, src, nelems, pe, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -1251,8 +1079,8 @@ def nvshmem_getmem_nbi(dst, src, nelems, pe, *, ty=None, loc: Location = UNKNOWN
     return Call(
         "tirx.nvshmem.getmem_nbi",
         [dst, src, nelems, pe],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1282,8 +1110,8 @@ def nvshmem_putmem_nbi(dst, src, nelems, pe, *, ty=None, loc: Location = UNKNOWN
     return Call(
         "tirx.nvshmem.putmem_nbi",
         [dst, src, nelems, pe],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1313,8 +1141,8 @@ def nvshmem_getmem_nbi_warp(dst, src, nelems, pe, *, ty=None, loc: Location = UN
     return Call(
         "tirx.nvshmem.getmem_nbi_warp",
         [dst, src, nelems, pe],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1344,8 +1172,8 @@ def nvshmem_putmem_nbi_warp(dst, src, nelems, pe, *, ty=None, loc: Location = UN
     return Call(
         "tirx.nvshmem.putmem_nbi_warp",
         [dst, src, nelems, pe],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1375,8 +1203,8 @@ def nvshmem_getmem_nbi_block(dst, src, nelems, pe, *, ty=None, loc: Location = U
     return Call(
         "tirx.nvshmem.getmem_nbi_block",
         [dst, src, nelems, pe],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1406,8 +1234,8 @@ def nvshmem_putmem_nbi_block(dst, src, nelems, pe, *, ty=None, loc: Location = U
     return Call(
         "tirx.nvshmem.putmem_nbi_block",
         [dst, src, nelems, pe],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1442,8 +1270,8 @@ def nvshmem_signal_op(sig_addr, signal, sig_op, pe, *, ty=None, loc: Location = 
     return Call(
         "tirx.nvshmem.signal_op",
         [sig_addr, signal, sig_op, pe],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1476,8 +1304,8 @@ def nvshmem_wait_until(
     return Call(
         "tirx.nvshmem.wait_until",
         [ivar, cmp, cmp_value, type],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1490,7 +1318,7 @@ def nvshmem_quiet(*, ty=None, loc: Location = UNKNOWN_LOC):
         The call expression.
     """
 
-    return Call("tirx.nvshmem.quiet", [], ty=ty, loc=loc)
+    return Call("tirx.nvshmem.quiet", [], loc=loc, ty=ty)
 
 
 def nvshmem_putmem_signal_nbi(
@@ -1530,8 +1358,8 @@ def nvshmem_putmem_signal_nbi(
     return Call(
         "tirx.nvshmem.putmem_signal_nbi",
         [dst, src, nelems, sig_addr, signal, sig_op, pe],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1572,8 +1400,8 @@ def nvshmem_putmem_signal_nbi_warp(
     return Call(
         "tirx.nvshmem.putmem_signal_nbi_warp",
         [dst, src, nelems, sig_addr, signal, sig_op, pe],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1614,8 +1442,8 @@ def nvshmem_putmem_signal_nbi_block(
     return Call(
         "tirx.nvshmem.putmem_signal_nbi_block",
         [dst, src, nelems, sig_addr, signal, sig_op, pe],
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1628,7 +1456,7 @@ def nvshmem_fence(*, ty=None, loc: Location = UNKNOWN_LOC):
         The call expression.
     """
 
-    return Call("tirx.nvshmem.fence", [], ty=ty, loc=loc)
+    return Call("tirx.nvshmem.fence", [], loc=loc, ty=ty)
 
 
 def nvshmem_barrier_all(*, ty=None, loc: Location = UNKNOWN_LOC):
@@ -1640,10 +1468,7 @@ def nvshmem_barrier_all(*, ty=None, loc: Location = UNKNOWN_LOC):
         The call expression.
     """
 
-    return Call("tirx.nvshmem.barrier_all", [], ty=ty, loc=loc)
-
-
-# Canonical Op builders also supply the historical direct-import aliases.
+    return Call("tirx.nvshmem.barrier_all", [], loc=loc, ty=ty)
 
 
 @tvm_ffi.register_object("tirx.cuda.TensorMapEncodeTiledAttr")
@@ -1698,14 +1523,9 @@ def tensormap_encode_tiled(
         attrs=TensorMapEncodeTiledAttr(
             descriptor_dtype, rank, interleave, swizzle, l2_promotion, oob_fill, force_cu_dtype
         ),
-        ty="int32",
         loc=loc,
+        ty="int32",
     )
 
 
 _init_op_api("tirx.cuda", __name__)
-for _name in Op.list_op_names():
-    if _name.startswith("tirx.cuda."):
-        _suffix = _name.removeprefix("tirx.cuda.")
-        if "." not in _suffix:
-            globals().setdefault("cuda_" + _suffix, globals()[_suffix])

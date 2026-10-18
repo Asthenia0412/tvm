@@ -85,7 +85,7 @@ def packed_contribution():
             T.cuda.wait_until(
                 observed[0],
                 slot.ptr_to([0]),
-                predicate=lambda v: T.shift_right(v, T.uint64(32)) == T.Cast(n, "uint64"),
+                predicate=lambda v: T.shift_right(v, T.uint64(32)) == T.Cast("uint64", n),
                 scope="gpu",
             )
             out[0] = T.bitwise_and(observed[0], T.uint64(0xFFFFFFFF))
@@ -278,10 +278,10 @@ def test_a_wait_rejects_attributes_it_cannot_mean(kwargs, error, message):
     spelling keep compiling while meaning something else.
     """
 
-    from tvm_tirx.backend.cuda.op import cuda_wait_until
+    from tvm_tirx.backend.cuda.op import wait_until
 
     with pytest.raises(error, match=message):
-        cuda_wait_until(None, None, None, **kwargs)
+        wait_until(None, None, None, **kwargs)
 
 
 def test_a_ptx_type_of_another_width_is_refused():

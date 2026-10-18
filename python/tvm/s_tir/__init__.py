@@ -27,7 +27,13 @@ tvm_tirx.script.register_dialect(
 
 from .iter_var import IterVar
 from ._tensor_intrin import TensorIntrin
-from .stmt import MatchTensorRegion, SBlock, SBlockRealize
+from .stmt import (
+    MatchTensorRegion,
+    SBlock,
+    SBlockRealize,
+    ShapeStridePattern,
+    match_shape_stride_pattern,
+)
 
 # dlight depends on compiler-only C++ functions (e.g. s_tir.schedule.GetSBlockRealize),
 # so skip it in runtime-only builds.
@@ -62,7 +68,10 @@ _register_namespace_initializer(_initialize_script_namespace, aliases=("s_tir",)
 def _check_script_module(module):
     from tvm_tirx.tirx import Function
 
-    if any(isinstance(fn, Function) and not fn.is_tirx for fn in module.functions.values()):
+    if any(
+        isinstance(fn, Function) and fn.attrs.get("s_tir", False)
+        for fn in module.functions.values()
+    ):
         from tvm.s_tir.script.ir_builder import _check_module_well_formed
 
         _check_module_well_formed(module)

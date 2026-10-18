@@ -20,12 +20,13 @@
 from typing import Any
 
 import triton
+import tvm_ffi
 from packaging import version
 from triton.runtime.jit import type_canonicalisation_dict
 
+import tvm_tirx
 from tvm_tirx import tirx
 from tvm_tirx.ir import PrimType, PtrType, is_prim_expr
-from tvm_tirx.runtime import Module
 from tvm_tirx.sym.utils import get_const_int
 
 from .external_kernel import BaseKernel
@@ -41,9 +42,10 @@ class TritonKernel(BaseKernel):
 
     This class bridges the Triton kernel with TVM runtime. The compilation includes the following
     steps:
-        - Deduce the kernel signature and generate the Triton kernel
-        - Embed the compiled kernel into the current IRModule as an external module
-        - Generate a call to the Triton kernel following its calling convention via call_packed.
+
+    - Deduce the kernel signature and generate the Triton kernel
+    - Embed the compiled kernel into the current IRModule as an external module
+    - Generate a call to the Triton kernel following its calling convention via call_packed.
     """
 
     def __init__(self, func):
@@ -54,7 +56,7 @@ class TritonKernel(BaseKernel):
         launch_args: list[int | tirx.Expr],
         *args: list[Any],
         **kwargs: dict[str, Any],
-    ) -> tuple[str, Module, list[Any]]:
+    ) -> tuple[str, tvm_ffi.Module, list[Any]]:
         """Compile the kernel to a device module.
 
         Parameters
@@ -138,5 +140,5 @@ class TritonKernel(BaseKernel):
             if size is not None:
                 if size != 0:
                     raise ValueError(f"Triton kernels requiring {scratch}={size} are not supported")
-                kernel_args.append(tirx.reinterpret("handle", tirx.IntImm("uint64", 0)))
+                kernel_args.append(tirx.reinterpret(tvm_tirx.ir.IntImm("uint64", 0), ty="handle"))
         return compiled, kernel_args

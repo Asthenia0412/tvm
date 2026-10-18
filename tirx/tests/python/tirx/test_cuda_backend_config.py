@@ -36,7 +36,7 @@ from tvm_tirx.backend.config import (
 )
 from tvm_tirx.backend.cuda import BackendConfig
 from tvm_tirx.backend.cuda.backend_config import compiler_options, resolve_backend_config
-from tvm_tirx.backend.cuda.transforms import BindBackendConfig
+from tvm_tirx.backend.cuda.transform import BindBackendConfig
 from tvm_tirx.script import tirx as T
 from tvm_tirx.testing import env
 
@@ -407,7 +407,7 @@ np.testing.assert_array_equal(b.numpy(), x * np.float32(0.5))
 
 def test_device_helpers_are_cloned_per_configuration():
     _require_compiler("nvrtc")
-    from tvm_tirx.backend.cuda.transforms import SpecializeDeviceHelpers
+    from tvm_tirx.backend.cuda.transform import SpecializeDeviceHelpers
     from tvm_tirx.script import ir as I
 
     @I.ir_module
@@ -450,7 +450,9 @@ def test_device_helpers_are_cloned_per_configuration():
     target = tvm_tirx.target.Target({"kind": "cuda", "arch": "sm_100a"}, host="llvm")
     mod = tvm_tirx.tirx.transform.BindTarget(target)(Module)
     mod = BindBackendConfig()(mod)
-    mod = tvm_tirx.tirx.transform.LowerTIRx()(mod)
+    mod = tvm_tirx.ir.transform.Sequential(
+        [tvm_tirx.tirx.transform.TileDispatch(), tvm_tirx.tirx.transform.LowerTensorLayouts()]
+    )(mod)
     mod = tvm_tirx.tirx.transform.SplitHostDevice()(mod)
     mod = SpecializeDeviceHelpers()(mod)
     groups = {}
@@ -516,7 +518,7 @@ def test_cuda_host_embeds_independent_binaries_in_plain_cpp(tmp_path, monkeypatc
             },
         ):
             x = T.cuda.thread_idx("x")
-            B[x] = A[x] * T.Cast(factor, "float32")
+            B[x] = A[x] * T.Cast("float32", factor)
         with T.device_entry(
             launch=T.cuda.LaunchConfig(grid=1, block=32),
             backend_config={
@@ -528,7 +530,7 @@ def test_cuda_host_embeds_independent_binaries_in_plain_cpp(tmp_path, monkeypatc
             },
         ):
             y = T.cuda.thread_idx("x")
-            C[y] = B[y] * T.Cast(other, "float32")
+            C[y] = B[y] * T.Cast("float32", other)
 
     target = tvm_tirx.target.Target({"kind": "cuda", "arch": env.cuda_arch(0)}, host="cuda_host")
     module = tvm_tirx.tirx.compile(main, target=target)
@@ -567,7 +569,7 @@ assert 'tvm_tirx' not in sys.modules
 def test_legacy_payloads():
     import struct
 
-    load = tvm_tirx.get_global_func("ffi.Module.load_from_bytes.cuda", allow_missing=True)
+    load = tvm_ffi.get_global_func("ffi.Module.load_from_bytes.cuda", allow_missing=True)
     if load is None:
         pytest.skip("CUDA runtime module loader is not linked")
 
@@ -599,7 +601,7 @@ def test_legacy_payloads():
     current = old_binary + string(snapshot.encode())
     assert load(current).inspect_source("backend_config") == snapshot
     for malformed in (old_binary + b"x", current[:-1], current + b"x"):
-        with pytest.raises(tvm_tirx.error.InternalError):
+        with pytest.raises(RuntimeError):
             load(malformed)
 
 
@@ -609,7 +611,7 @@ import tvm_tirx
 import tvm_tirx.testing
 from tvm_tirx.backend.cuda import BackendConfig
 from tvm_tirx.backend.config import prepare_target
-from tvm_tirx.backend.cuda.transforms import BindBackendConfig
+from tvm_tirx.backend.cuda.transform import BindBackendConfig
 from tvm_tirx.script import tirx as T
 
 target = tvm_tirx.target.Target("cuda", host="llvm")

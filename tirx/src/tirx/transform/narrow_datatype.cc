@@ -75,6 +75,8 @@ using sym::ConstIntBound;
 // Otherwise, `var` is not narrowed, that is, `vmap[var] = var.dtype.bits()`
 class DataTypeVisitor final : public StmtExprVisitor {
  public:
+  using StmtExprVisitor::Visit_;
+
   explicit DataTypeVisitor(int target_bits) : bits_(target_bits), target_bits_(target_bits) {}
 
   ffi::Optional<VisitInterrupt> Visit(ffi::AnyView expr) final {
@@ -248,7 +250,7 @@ class NarrowDataTypeRewriter : public IndexDataTypeRewriter {
       PrimExpr new_value = new_op->value;
       PrimType cast_type = visitor_->vmap.at(op);
       if (new_value.ty() != cast_type) {
-        new_value = prim::Cast(new_value, cast_type);
+        new_value = prim::Cast(cast_type, new_value);
       }
       return new_value;
     }

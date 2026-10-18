@@ -20,16 +20,26 @@ from types import SimpleNamespace
 import pytest
 
 import tvm_tirx
-from tvm_tirx.ir import Call, Evaluate, Op, PrimType, Return, const, make_node, register_op_attr
+from tvm_tirx.ir import (
+    Call,
+    Evaluate,
+    Op,
+    PrimType,
+    Return,
+    SeqStmt,
+    const,
+    make_node,
+    register_op_attr,
+)
 from tvm_tirx.script import tirx as T
-from tvm_tirx.tirx import Function, decl_tensor
+from tvm_tirx.tirx import Function, TensorType, Var
 from tvm_tirx.tirx.tile import DispatchContext
 from tvm_tirx.tirx.tile.dispatch import run_dispatch
 from tvm_tirx.tirx.tile.instruction import SPECS
 
 
 def test_selected_lowerer_reports_context_and_cause(monkeypatch):
-    a = decl_tensor((16,), "float32", scope="local", layout="default")
+    a = Var("tensor", TensorType((16,), "float32", scope="local", layout="default"))
     call = T.cuda.tile.apply(T.ptx["sqrt.rn.f32"], a, a)
 
     def failing(view, context):
@@ -46,7 +56,7 @@ def test_selected_lowerer_reports_context_and_cause(monkeypatch):
 
 
 def test_backend_mismatch_is_rejected():
-    a = decl_tensor((16,), "float32", scope="local", layout="default")
+    a = Var("tensor", TensorType((16,), "float32", scope="local", layout="default"))
     context = SimpleNamespace(
         target=SimpleNamespace(kind=SimpleNamespace(name="trn")), scope_kind="thread"
     )
@@ -57,7 +67,7 @@ def test_backend_mismatch_is_rejected():
 @pytest.mark.parametrize("backend", ["cuda", "trn"])
 @pytest.mark.parametrize("scope", ["kernel", "unknown"])
 def test_instruction_scope_contract(backend, scope):
-    tensor = decl_tensor((16,), "float32", scope="local", layout="default")
+    tensor = Var("tensor", TensorType((16,), "float32", scope="local", layout="default"))
     instruction = (
         (lambda *args, **kw: T.cuda.tile.apply(T.ptx["add.f32"], *args, **kw))
         if backend == "cuda"
@@ -73,7 +83,12 @@ def test_instruction_scope_contract(backend, scope):
             "tirx.tensor." + SPECS[call.op.name].schema,
             scope=T.ThreadScope(f"{backend}.kernel"),
         )
-        raw = tvm_tirx.ir.Call(call.op, call.args, attrs=attrs, ty=call.ty)
+        raw = tvm_tirx.ir.Call(
+            call.op,
+            call.args,
+            attrs=attrs,
+            ty=call.ty,
+        )
         with pytest.raises(ValueError, match=f"unsupported scope '{scope}'"):
             raw.validate()
     else:
@@ -85,14 +100,15 @@ def test_instruction_scope_contract(backend, scope):
 
 def _custom_call(name):
     op_name = f"test.tile_dispatch.{name}"
+    tvm_tirx.ir._ffi_api.RegisterOp(op_name, "Tile dispatch test")
     register_op_attr(op_name, "TFixedReturnType", PrimType("void"))
-    register_op_attr(op_name, "TCallEffectKind", 3)
+    register_op_attr(op_name, "TCallEffectKind", tvm_tirx.ir.CallEffectKind.UpdateState)
     op = Op.get(op_name)
     op.set_signature(args=["token"])
     op.set_attrs_type_key("tirx.tensor.ScopeAttrs")
     return Call(
         op,
-        [const(7)],
+        [const(7, "int32")],
         attrs=make_node("tirx.tensor.ScopeAttrs", scope=T.ThreadScope("cuda.thread")),
     )
 
@@ -117,7 +133,7 @@ def test_op_attribute_dispatches_without_python_instruction_spec():
         assert context.thread_scope.backend == "cuda"
         assert context.scope_kind == "thread"
         seen.append(actual_call)
-        return Function([], Evaluate(23))
+        return Evaluate(23)
 
     lowered = _lower(Evaluate(call))
     assert len(seen) == 1
@@ -127,7 +143,7 @@ def test_op_attribute_dispatches_without_python_instruction_spec():
     register_op_attr(
         call.op.name,
         "FTileOpDispatch",
-        lambda actual_call, context: Function([], Evaluate(41)),
+        lambda actual_call, context: Evaluate(41),
         override=True,
     )
     assert _lower(Evaluate(call)).body.seq[0].value == 41
@@ -137,12 +153,12 @@ def test_dispatch_recursively_expands_tile_implementations():
     outer = _custom_call("outer")
     inner = _custom_call("inner")
     register_op_attr(
-        outer.op.name, "FTileOpDispatch", lambda call, context: Function([], Evaluate(inner))
+        outer.op.name,
+        "FTileOpDispatch",
+        lambda call, context: SeqStmt([Evaluate(inner), Evaluate(7)]),
     )
-    register_op_attr(
-        inner.op.name, "FTileOpDispatch", lambda call, context: Function([], Evaluate(31))
-    )
-    assert _lower(Evaluate(outer)).body.seq[0].value == 31
+    register_op_attr(inner.op.name, "FTileOpDispatch", lambda call, context: Evaluate(31))
+    assert [stmt.value for stmt in _lower(Evaluate(outer)).body.seq] == [31, 7]
 
 
 def test_op_without_dispatch_attribute_is_preserved():
@@ -153,16 +169,29 @@ def test_op_without_dispatch_attribute_is_preserved():
 
 def test_residual_tile_call_is_rejected():
     call = _custom_call("residual")
-    register_op_attr(
-        call.op.name, "FTileOpDispatch", lambda call, context: Function([], Evaluate(0))
-    )
+    register_op_attr(call.op.name, "FTileOpDispatch", lambda call, context: Evaluate(0))
     # Dispatch expands statement-boundary Calls; other positions must be rejected.
-    with pytest.raises(tvm_tirx.error.InternalError, match="Failed to lower the TIRx program"):
+    with pytest.raises(RuntimeError, match="Failed to lower the TIRx program"):
         _lower(Return(call))
 
 
-def test_dispatch_requires_function_result():
+def test_dispatch_requires_stmt_result():
     call = _custom_call("invalid_result")
-    register_op_attr(call.op.name, "FTileOpDispatch", lambda call, context: Evaluate(0))
-    with pytest.raises(TypeError, match="tirx.Function"):
+    register_op_attr(
+        call.op.name, "FTileOpDispatch", lambda call, context: Function([], Evaluate(0))
+    )
+    with pytest.raises(TypeError, match="ir.Stmt"):
         _lower(Evaluate(call))
+
+
+@pytest.mark.parametrize("result", [Function([], Evaluate(0)), const(0), None])
+def test_selected_lowerer_requires_stmt_result(monkeypatch, result):
+    tensor = Var("tensor", TensorType((16,), "float32", scope="local", layout="default"))
+    call = T.cuda.tile.apply(T.ptx["sqrt.rn.f32"], tensor, tensor)
+    monkeypatch.setattr(SPECS[call.op.name], "lower", lambda view, context: result)
+    context = SimpleNamespace(target=tvm_tirx.target.Target("cuda"), scope_kind="thread")
+    message = (
+        "lowerer returned no implementation" if result is None else "lowerer must return a Stmt"
+    )
+    with pytest.raises(RuntimeError, match=message):
+        run_dispatch(call, context)

@@ -20,11 +20,10 @@
 from functools import cache
 
 from tvm_tirx.backend.trn.layout import is_trainium_layout
-from tvm_tirx.ir import TensorRegion
+from tvm_tirx.ir import FloatImm, Stmt, TensorRegion
 from tvm_tirx.runtime import MemoryScope
 from tvm_tirx.script import tirx as T
 from tvm_tirx.sym.analyzer import Analyzer
-from tvm_tirx.tirx import FloatImm
 from tvm_tirx.tirx.tile.common import MapOpType
 
 from ..common import nki_dim
@@ -137,7 +136,7 @@ def get_const_bias_tensor(bias, shape, dtype, workspace, sctx):
     return bias_tensor
 
 
-def generate_unary_func(
+def generate_unary_stmt(
     dst_tensor_region,
     _src,
     inst_gen: InstructionGenerator,
@@ -149,8 +148,8 @@ def generate_unary_func(
     workspace,
     config,
     sctx,
-):
-    """Generate a function that implements a unary operation."""
+) -> Stmt:
+    """Generate a statement that implements a unary operation."""
     # Prepare parameters
     p_size = dst_tensor_region.source.ty.effective_layout().size("P")
 
@@ -204,4 +203,4 @@ def generate_unary_func(
                                     T.evaluate(T.nki.activation(dst[tuple(dst_indices)], src[tuple(src_indices)], opcode, scale=scale, bias=bias_tensor[p_loop, f_loop]))  # noqa: E501
     # fmt: on
 
-    return impl
+    return impl.body

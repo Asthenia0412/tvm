@@ -16,12 +16,8 @@
 # under the License.
 
 [build-system]
-# mlc-z3-static ships the PIC static libz3 + headers consumed by USE_Z3=ON.
-requires = [
-  "scikit-build-core>=0.11",
-  "mlc-z3-static>=4.16.0",
-  "apache-tvm-ffi>=0.1.15rc0",
-]
+# mlc-z3-static ships the PIC static libz3 + headers consumed by TVM_TIRX_USE_Z3=ON.
+requires = ["scikit-build-core>=0.11", "mlc-z3-static>=4.16.0"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -51,9 +47,11 @@ dependencies = [
   "apache-tvm-ffi-orcjit==0.1.2",
   "ml_dtypes",
   "numpy",
-  "typing_extensions",
   "packaging",
 ]
+
+[project.scripts]
+tvm-tirx-config = "tvm_tirx.config:__main__"
 
 [project.optional-dependencies]
 torch = ["torch"]
@@ -63,7 +61,7 @@ all = ["psutil", "cloudpickle"]
 
 [project.urls]
 Homepage = "https://tvm.apache.org/"
-Documentation = "https://tvm.apache.org/docs/"
+Documentation = "https://tvm.apache.org/tirx/"
 Repository = "https://github.com/apache/tvm"
 "Bug Tracker" = "https://github.com/apache/tvm/issues"
 
@@ -71,7 +69,6 @@ Repository = "https://github.com/apache/tvm"
 torch = ["torch"]
 popen-pool = ["psutil", "cloudpickle"]
 test = [
-  "scipy",
   "z3-solver",
   "pytest",
   "pytest-xdist",
@@ -93,6 +90,7 @@ wheel.py-api = "py3"
 build-dir = "build"
 
 # Wheel configuration
+install.components = ["tvm_tirx"]
 wheel.packages = ["python/tvm_tirx"]
 wheel.install-dir = "tvm_tirx"
 
@@ -109,6 +107,7 @@ sdist.include = [
   "/NOTICE",
   "/tests/**",
   "/3rdparty/compiler-rt/builtin_fp16.h",
+  "/3rdparty/tvm-ffi/**",
   "!**/.git",
   "!**/.git/**",
   "!**/__pycache__/**",
@@ -123,11 +122,8 @@ sdist.exclude = ["**"]
 logging.level = "INFO"
 
 [tool.scikit-build.cmake.define]
-TVM_BUILD_PYTHON_MODULE = "ON"
-USE_CUDA = "OFF"
-# Statically link Z3 from the mlc-z3-static build dependency by default.
-USE_Z3 = "AUTO"
-BUILD_TESTING = "OFF"
+TVM_TIRX_BUILD_PYTHON_MODULE = "ON"
+TVM_TIRX_BUILD_TESTS = "OFF"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -145,7 +141,7 @@ markers = [
 skip = "*-win32 *-manylinux_i686 *-musllinux*"
 build-verbosity = 1
 test-requires = ["pytest", "numpy"]
-test-command = "python -I -c \"import importlib.util; assert importlib.util.find_spec('tvm') is None\" && python -I -m pytest -vvs {package}/tests/python/all-platform-minimal-test {package}/tests/python/runtime/test_runtime_tensor.py {package}/tests/python/ir/test_ir_type.py {package}/tests/python/script/test_ir_builder.py {package}/tests/python/codegen/llvm/test_llvm.py::test_llvm_vadd_pipeline {package}/tests/python/codegen/gpu_common/test_allreduce.py::test_allreduce_sum_compile"
+test-command = "python -I -c \"import importlib.util; assert importlib.util.find_spec('tvm') is None\" && python -I -m pytest -vvs {package}/tests/python/runtime/test_validate_wheel_library.py {package}/tests/python/runtime/test_tensor.py {package}/tests/python/ir/test_type.py {package}/tests/python/script/test_ir_builder.py {package}/tests/python/codegen/llvm/test_basic.py::test_llvm_vadd_pipeline {package}/tests/python/codegen/gpu_common/test_allreduce.py::test_allreduce_sum_compile"
 
 [tool.cibuildwheel.linux]
 repair-wheel-command = "auditwheel repair --exclude libtvm_ffi.so --exclude libtvm_runtime_cuda.so --exclude 'libcuda.so.*' --exclude 'libcudart.so.*' --exclude 'libnvrtc.so.*' --exclude 'libnvrtc-builtins.so.*' -w {dest_dir} {wheel}"

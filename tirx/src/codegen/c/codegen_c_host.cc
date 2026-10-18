@@ -49,11 +49,11 @@ void CodeGenCHost::Init(bool output_ssa, bool emit_asserts, bool emit_fwd_func_d
   emit_fwd_func_decl_ = emit_fwd_func_decl;
   declared_globals_.clear();
   decl_stream << "// tvm target: " << target_str << "\n";
-  decl_stream << "#define TVM_EXPORTS\n";
   decl_stream << "#include \"tvm/ffi/extra/c_env_api.h\"\n";
   decl_stream << "#include \"tvm/runtime/base.h\"\n";
   decl_stream << "#include \"tvm/runtime/c_backend_api.h\"\n";
   decl_stream << "#include \"tvm/ffi/c_api.h\"\n";
+  decl_stream << "#define TVM_DLL TVM_FFI_DLL_EXPORT\n";
   decl_stream << "#include <math.h>\n";
   decl_stream << "#include <stdbool.h>\n";
   CodeGenCHost::InitGlobalContext();
@@ -72,14 +72,14 @@ void CodeGenCHost::AddFunction(const GlobalVar& gvar, const Function& func) {
 
 void CodeGenCHost::AddFunction(const GlobalVar& gvar, const Function& func,
                                bool emit_fwd_func_decl) {
-  auto global_symbol = func->GetAttr<ffi::String>(tvm::attr::kGlobalSymbol);
+  auto global_symbol = func->GetAttr(tvm::attr::kGlobalSymbol);
   if (global_symbol) {
     function_names_.push_back(global_symbol.value());
   }
 
   emit_fwd_func_decl_ = emit_fwd_func_decl;
   CodeGenC::AddFunction(gvar, func);
-  if (func->HasNonzeroAttr(tvm::tirx::attr::kIsEntryFunc) && !has_tvm_ffi_main_func_) {
+  if (func->HasNonzeroAttr(tvm::tirx::attr::kIsEntryFunc.name) && !has_tvm_ffi_main_func_) {
     TVM_FFI_ICHECK(global_symbol.has_value())
         << "CodeGenCHost: The entry func must have the global_symbol attribute, "
         << "but function " << gvar << " only has attributes " << func->attrs;
@@ -379,9 +379,9 @@ ffi::Module BuildCHost(IRModule mod, Target target) {
   bool emit_fwd_func_decl = true;
 
   std::unordered_set<std::string> devices;
-  if (mod->GetAttr<ffi::Map<GlobalVar, ffi::String>>(tvm::attr::kDeviceContexts) != nullptr) {
+  if (mod->GetAttr(tvm::attr::kDeviceContexts) != nullptr) {
     ffi::Map<GlobalVar, ffi::String> device_contexts =
-        mod->GetAttr<ffi::Map<GlobalVar, ffi::String>>(tvm::attr::kDeviceContexts).value();
+        mod->GetAttr(tvm::attr::kDeviceContexts).value();
     for (auto const& context : device_contexts) {
       devices.insert(context.second.data());
     }
@@ -391,10 +391,6 @@ ffi::Module BuildCHost(IRModule mod, Target target) {
   cg.Init(output_ssa, emit_asserts, emit_fwd_func_decl, target->str(), devices);
   cg.SetConstantsByteAlignment(target->GetAttr<int64_t>("constants-byte-alignment").value_or(16));
 
-  auto is_aot_executor_fn = [](const Function& func) -> bool {
-    return func->GetAttr<bool>(tvm::codegen::attr::kRunnerFunction, false).value();
-  };
-
   std::vector<std::pair<GlobalVar, Function>> funcs;
   for (auto [gvar, base_func] : mod->functions) {
     TVM_FFI_ICHECK(base_func->IsInstance<FunctionNode>()) << "CodegenCHost: Can only take Function";
@@ -402,12 +398,9 @@ ffi::Module BuildCHost(IRModule mod, Target target) {
     funcs.push_back({gvar, function});
   }
 
-  // Sort functions
-  auto sort_key = [&is_aot_executor_fn](const auto& kv) {
-    return std::tuple{is_aot_executor_fn(kv.second), kv.first->name_hint};
-  };
-  std::sort(funcs.begin(), funcs.end(), [&sort_key](const auto& kv_a, const auto& kv_b) {
-    return sort_key(kv_a) < sort_key(kv_b);
+  // Sort functions by name for deterministic output.
+  std::sort(funcs.begin(), funcs.end(), [](const auto& kv_a, const auto& kv_b) {
+    return kv_a.first->name_hint < kv_b.first->name_hint;
   });
 
   for (const auto& [gvar, function] : funcs) {

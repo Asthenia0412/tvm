@@ -17,24 +17,25 @@
 # pylint: disable=missing-docstring
 """Utility methods for generic GPU."""
 
+import tvm_ffi
+
 import tvm_tirx
 from tvm import s_tir
-from tvm_tirx import DataType, tirx
 from tvm_tirx.ir import PrimType
 from tvm_tirx.target import Target
 
 
-def get_bytes(dtype: DataType | PrimType | str) -> int:
+def get_bytes(dtype: tvm_ffi.dtype | PrimType | str) -> int:
     if isinstance(dtype, PrimType):
         dtype = dtype.dtype
     if isinstance(dtype, str):
-        dtype = DataType(dtype)
+        dtype = tvm_ffi.dtype(dtype)
     return dtype.itemsize
 
 
 def get_extent(sch: s_tir.Schedule, loop_rv: s_tir.schedule.LoopRV):
     loop: tvm_tirx.ir.For = sch.get(loop_rv)
-    return loop.extent.value if isinstance(loop.extent, tirx.IntImm) else loop.extent
+    return loop.extent.value if isinstance(loop.extent, tvm_tirx.ir.IntImm) else loop.extent
 
 
 def auto_vectorize(sch: s_tir.Schedule, loop: s_tir.schedule.LoopRV, max_vec: int):
@@ -87,7 +88,7 @@ def suggest_threads_per_block(
     dynamic: list[int] = []
     for i, loop in enumerate(loops):
         loop_extent = loop.extent
-        if isinstance(loop_extent, tirx.IntImm):
+        if isinstance(loop_extent, tvm_tirx.ir.IntImm):
             loop_extent = loop_extent.value
             extent = 1
             while extent <= loop_extent and extent <= threads:

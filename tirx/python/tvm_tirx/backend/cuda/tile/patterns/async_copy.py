@@ -28,9 +28,10 @@ cache_policy. DSMEM instead requires mbar and remote_cta_id, both interpreted
 before mapa. Layout strides are elements; chunk_bytes and src_size are bytes.
 """
 
+import tvm_ffi
+
 from tvm_tirx.backend.cuda.ptx import PTXNamespace
 from tvm_tirx.ir import Bind, Evaluate, Var
-from tvm_tirx.runtime import DataType
 from tvm_tirx.script import tirx as T
 
 from .common import Context, scalar
@@ -52,7 +53,7 @@ def lower(opcode, entry, modifiers, args, params, sctx):
         ("dst", args[0], ("shared", "shared.dyn")),
         ("src", args[1], ("shared", "shared.dyn") if bulk else ("global",)),
     ):
-        bits = DataType(region.source.ty.dtype.dtype).bits
+        bits = tvm_ffi.dtype(region.source.ty.dtype.dtype).bits
         if size * 8 % bits:
             raise ValueError(f"{name}: chunk_bytes must contain whole storage elements")
         elements = size * 8 // bits
@@ -66,14 +67,16 @@ def lower(opcode, entry, modifiers, args, params, sctx):
         barrier, remote = params.pop("mbar"), params.pop("remote_cta_id")
         mapped = Var("remote_addresses", T.Tensor((2,), "uint64", scope="local", layout="default"))
         ctx.bindings.append(Bind(mapped, T.alloc_tensor(ty_args=[mapped.ty])))
-        ctx.bindings.append(Evaluate(T.ptx.mapa.u64(mapped[0], barrier, T.cast(remote, "uint32"))))
+        ctx.bindings.append(
+            Evaluate(T.ptx.mapa.u64(mapped[0], barrier, T.cast(remote, ty="uint32")))
+        )
         body = [
-            T.ptx.mapa.u64(mapped[1], dst.pointer((0,)), T.cast(remote, "uint32")),
+            T.ptx.mapa.u64(mapped[1], dst.pointer((0,)), T.cast(remote, ty="uint32")),
             instruction(
-                T.cast(mapped[1], "uint32"),
+                T.cast(mapped[1], ty="uint32"),
                 src.pointer((0,)),
                 T.uint32(size),
-                T.cast(mapped[0], "uint32"),
+                T.cast(mapped[0], ty="uint32"),
                 pred=pred,
             ),
         ]

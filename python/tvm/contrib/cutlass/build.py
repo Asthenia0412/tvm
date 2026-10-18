@@ -26,6 +26,7 @@ import os
 from collections.abc import Sequence
 from functools import reduce
 
+import tvm_ffi
 from tvm_ffi import register_global_func
 
 import tvm_tirx
@@ -43,7 +44,7 @@ logger = logging.getLogger("cutlass")
 
 def has_cutlass():
     """Returns true if the CUTLASS custom codegen is available"""
-    return tvm_tirx.get_global_func("relax.ext.cutlass", True) is not None
+    return tvm_ffi.get_global_func("relax.ext.cutlass", True) is not None
 
 
 def _get_cutlass_path():
@@ -400,7 +401,7 @@ def _extract_relax_function_signature(f):
 
 
 def _extract_arg_idx(pattern_name, f):
-    extract_func = tvm_tirx.get_global_func("relax.contrib.extract_arg_idx")
+    extract_func = tvm_ffi.get_global_func("relax.contrib.extract_arg_idx")
     arg_indices = extract_func(pattern_name, f)
     return {k: int(v) for k, v in arg_indices.items()}
 
@@ -418,7 +419,7 @@ def is_shape_valid_for_cutlass_matmul(
     as well as ND x 2D and 2D x ND. For example, it cannot handle matmul with shape
     (2, 1, 4, 8) x (2, 3, 8, 16), because the batch stride of lhs is not constant.
     """
-    if not isinstance(lhs_shape[-1], tvm_tirx.tirx.expr.IntImm | int):
+    if not isinstance(lhs_shape[-1], tvm_tirx.ir.IntImm | int):
         # Reduction axis must be constant
         return False
 
@@ -850,7 +851,7 @@ def compile_cutlass_module(c_source_module, options):
 
     Parameters
     ----------
-    c_source_module: runtime.Module
+    c_source_module: tvm_ffi.Module
         A C-source module containing CUTLASS kernels.
 
     options: dict
@@ -863,7 +864,7 @@ def compile_cutlass_module(c_source_module, options):
 
     Returns
     -------
-    rt_mod : runtime.Module
+    rt_mod : tvm_ffi.Module
         A runtime module where all cutlass kernels have been compiled.
     """
     tmp_dir = options.get("tmp_dir", "./tmp")
@@ -874,10 +875,12 @@ def compile_cutlass_module(c_source_module, options):
     compile_options = _get_cutlass_compile_options(**compile_config)
     lib_path = os.path.join(tmp_dir, "cutlass.o")
     logger.info("Compiling generated CUTLASS code")
-    c_source_module.export_library(lib_path, workspace_dir=tmp_dir, **compile_options)
+    tvm_tirx.codegen.Executable(c_source_module).export_library(
+        lib_path, workspace_dir=tmp_dir, **compile_options
+    )
 
     # Recover static library
-    return tvm_tirx.runtime.load_static_library(lib_path, function_names)
+    return tvm_tirx.codegen.load_static_library(lib_path, function_names)
 
 
 def finalize_modules(lib, lib_path="compile.so", tmp_dir="./tmp"):
@@ -888,7 +891,7 @@ def finalize_modules(lib, lib_path="compile.so", tmp_dir="./tmp"):
 
     Parameters
     ----------
-    lib : runtime.Module
+    lib : tvm_ffi.Module
         The output from build.
 
     lib_path : string
@@ -899,10 +902,10 @@ def finalize_modules(lib, lib_path="compile.so", tmp_dir="./tmp"):
 
     Returns
     -------
-    updated_lib : runtime.Module
+    updated_lib : tvm_ffi.Module
         The updated library with all compilation and linking completed.
 
     """
     lib_path = os.path.join(tmp_dir, lib_path)
-    lib.export_library(lib_path, workspace_dir=tmp_dir, cc="nvcc")
+    tvm_tirx.codegen.Executable(lib).export_library(lib_path, workspace_dir=tmp_dir, cc="nvcc")
     return runtime.load_module(lib_path)

@@ -79,7 +79,7 @@ class GenericConstNode : public ConstantNode {
 /*! \brief Managed reference to a generic constant. */
 class GenericConst : public Constant {
  public:
-  TVM_TIRX_DLL GenericConst(ffi::Any value, Type ty, Location loc = UnknownLoc());
+  TVM_TIRX_DLL GenericConst(Type ty, ffi::Any value, Location loc = UnknownLoc());
 
   explicit GenericConst(ffi::ObjectPtr<GenericConstNode> node) : Constant(std::move(node)) {}
 
@@ -822,7 +822,7 @@ class LambdaExprNode : public StagingExprNode {
 /*! \brief Managed reference to a typed staging lambda. */
 class LambdaExpr : public StagingExpr {
  public:
-  TVM_TIRX_DLL explicit LambdaExpr(ffi::Array<Var> vars, Expr body);
+  TVM_TIRX_DLL explicit LambdaExpr(ffi::Array<Var> vars, Expr body, Location loc = UnknownLoc());
   TVM_FFI_DEFINE_OBJECT_REF_METHODS_NOTNULLABLE(LambdaExpr, StagingExpr, LambdaExprNode);
 };
 
@@ -1190,8 +1190,10 @@ inline constexpr ffi::reflection::AttrKey<int64_t> kCallEffectKind{"TCallEffectK
 using TCallEffectKind = decltype(op_attr::kCallEffectKind)::ValueType;
 
 namespace type_attr {
-inline constexpr const char* kTensorLoadInferType = "__tvm_tensor_load_infer_type__";
-inline constexpr const char* kSubscriptExprRealize = "__tvm_subscript_expr_realize__";
+inline constexpr ffi::reflection::AttrKey<FTensorLoadInferType> kTensorLoadInferType{
+    "__tvm_tensor_load_infer_type__"};
+inline constexpr ffi::reflection::AttrKey<ffi::Function> kSubscriptExprRealize{
+    "__tvm_subscript_expr_realize__"};
 }  // namespace type_attr
 
 }  // namespace tvm

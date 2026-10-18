@@ -45,8 +45,10 @@ def resize(A: T.Tensor((1, 3, 40, 40), "float32"), B: T.Tensor((1, 3, 80, 80), "
 def resize_cache_index(
     A: T.Tensor((1, 3, 40, 40), "float32"), B: T.Tensor((1, 3, 80, 80), "float32")
 ) -> None:
-    index_var_0 = Ts.sblock_alloc_tensor([80, 80], dtype="int32", strides=[1])
-    index_var_1 = Ts.sblock_alloc_tensor([80], dtype="int32", strides=[1])
+    index_var_0 = Ts.sblock_alloc_tensor(
+        [80, 80], dtype="int32", layout=T.TileLayout(T.S[[80, 80] : [80, 1]])
+    )
+    index_var_1 = Ts.sblock_alloc_tensor([80], dtype="int32", layout=T.TileLayout(T.S[[80] : [1]]))
     for ax0, ax1 in T.grid(80, 80):
         with Ts.sblock("index_0"):
             v0, v1 = Ts.axis.remap("SS", [ax0, ax1])
@@ -77,20 +79,22 @@ def bilinear_resize(
             Ts.reads(x[i0_1, i1_1, 0:40, 0:40])
             Ts.writes(resize[i0_1, i1_1, i2_1, i3_1])
             resize[i0_1, i1_1, i2_1, i3_1] = T.Cast(
+                "float16",
                 (
                     T.Cast(
+                        "float32",
                         x[
                             i0_1,
                             i1_1,
                             T.max(
                                 T.min(
                                     T.Cast(
+                                        "int32",
                                         T.floor(
-                                            (T.Cast(i2_1, "float32") + T.float32(0.5))
+                                            (T.Cast("float32", i2_1) + T.float32(0.5))
                                             * T.float32(0.5)
                                             - T.float32(0.5),
                                         ),
-                                        "int32",
                                     ),
                                     39,
                                 ),
@@ -99,50 +103,50 @@ def bilinear_resize(
                             T.max(
                                 T.min(
                                     T.Cast(
+                                        "int32",
                                         T.floor(
-                                            (T.Cast(i3_1, "float32") + T.float32(0.5))
+                                            (T.Cast("float32", i3_1) + T.float32(0.5))
                                             * T.float32(0.5)
                                             - T.float32(0.5),
                                         ),
-                                        "int32",
                                     ),
                                     39,
                                 ),
                                 0,
                             ),
                         ],
-                        "float32",
                     )
                     * (
                         T.float32(1)
                         - (
-                            (T.Cast(i3_1, "float32") + T.float32(0.5)) * T.float32(0.5)
+                            (T.Cast("float32", i3_1) + T.float32(0.5)) * T.float32(0.5)
                             - T.float32(0.5)
                             - T.Cast(
+                                "float32",
                                 T.Cast(
+                                    "int32",
                                     T.floor(
-                                        (T.Cast(i3_1, "float32") + T.float32(0.5)) * T.float32(0.5)
+                                        (T.Cast("float32", i3_1) + T.float32(0.5)) * T.float32(0.5)
                                         - T.float32(0.5),
                                     ),
-                                    "int32",
                                 ),
-                                "float32",
                             )
                         )
                     )
                     + T.Cast(
+                        "float32",
                         x[
                             i0_1,
                             i1_1,
                             T.max(
                                 T.min(
                                     T.Cast(
+                                        "int32",
                                         T.floor(
-                                            (T.Cast(i2_1, "float32") + T.float32(0.5))
+                                            (T.Cast("float32", i2_1) + T.float32(0.5))
                                             * T.float32(0.5)
                                             - T.float32(0.5),
                                         ),
-                                        "int32",
                                     ),
                                     39,
                                 ),
@@ -151,12 +155,12 @@ def bilinear_resize(
                             T.max(
                                 T.min(
                                     T.Cast(
+                                        "int32",
                                         T.floor(
-                                            (T.Cast(i3_1, "float32") + T.float32(0.5))
+                                            (T.Cast("float32", i3_1) + T.float32(0.5))
                                             * T.float32(0.5)
                                             - T.float32(0.5),
                                         ),
-                                        "int32",
                                     )
                                     + 1,
                                     39,
@@ -164,54 +168,54 @@ def bilinear_resize(
                                 0,
                             ),
                         ],
-                        "float32",
                     )
                     * (
-                        (T.Cast(i3_1, "float32") + T.float32(0.5)) * T.float32(0.5)
+                        (T.Cast("float32", i3_1) + T.float32(0.5)) * T.float32(0.5)
                         - T.float32(0.5)
                         - T.Cast(
+                            "float32",
                             T.Cast(
+                                "int32",
                                 T.floor(
-                                    (T.Cast(i3_1, "float32") + T.float32(0.5)) * T.float32(0.5)
+                                    (T.Cast("float32", i3_1) + T.float32(0.5)) * T.float32(0.5)
                                     - T.float32(0.5),
                                 ),
-                                "int32",
                             ),
-                            "float32",
                         )
                     )
                 )
                 * (
                     T.float32(1)
                     - (
-                        (T.Cast(i2_1, "float32") + T.float32(0.5)) * T.float32(0.5)
+                        (T.Cast("float32", i2_1) + T.float32(0.5)) * T.float32(0.5)
                         - T.float32(0.5)
                         - T.Cast(
+                            "float32",
                             T.Cast(
+                                "int32",
                                 T.floor(
-                                    (T.Cast(i2_1, "float32") + T.float32(0.5)) * T.float32(0.5)
+                                    (T.Cast("float32", i2_1) + T.float32(0.5)) * T.float32(0.5)
                                     - T.float32(0.5),
                                 ),
-                                "int32",
                             ),
-                            "float32",
                         )
                     )
                 )
                 + (
                     T.Cast(
+                        "float32",
                         x[
                             i0_1,
                             i1_1,
                             T.max(
                                 T.min(
                                     T.Cast(
+                                        "int32",
                                         T.floor(
-                                            (T.Cast(i2_1, "float32") + T.float32(0.5))
+                                            (T.Cast("float32", i2_1) + T.float32(0.5))
                                             * T.float32(0.5)
                                             - T.float32(0.5),
                                         ),
-                                        "int32",
                                     )
                                     + 1,
                                     39,
@@ -221,50 +225,50 @@ def bilinear_resize(
                             T.max(
                                 T.min(
                                     T.Cast(
+                                        "int32",
                                         T.floor(
-                                            (T.Cast(i3_1, "float32") + T.float32(0.5))
+                                            (T.Cast("float32", i3_1) + T.float32(0.5))
                                             * T.float32(0.5)
                                             - T.float32(0.5),
                                         ),
-                                        "int32",
                                     ),
                                     39,
                                 ),
                                 0,
                             ),
                         ],
-                        "float32",
                     )
                     * (
                         T.float32(1)
                         - (
-                            (T.Cast(i3_1, "float32") + T.float32(0.5)) * T.float32(0.5)
+                            (T.Cast("float32", i3_1) + T.float32(0.5)) * T.float32(0.5)
                             - T.float32(0.5)
                             - T.Cast(
+                                "float32",
                                 T.Cast(
+                                    "int32",
                                     T.floor(
-                                        (T.Cast(i3_1, "float32") + T.float32(0.5)) * T.float32(0.5)
+                                        (T.Cast("float32", i3_1) + T.float32(0.5)) * T.float32(0.5)
                                         - T.float32(0.5),
                                     ),
-                                    "int32",
                                 ),
-                                "float32",
                             )
                         )
                     )
                     + T.Cast(
+                        "float32",
                         x[
                             i0_1,
                             i1_1,
                             T.max(
                                 T.min(
                                     T.Cast(
+                                        "int32",
                                         T.floor(
-                                            (T.Cast(i2_1, "float32") + T.float32(0.5))
+                                            (T.Cast("float32", i2_1) + T.float32(0.5))
                                             * T.float32(0.5)
                                             - T.float32(0.5),
                                         ),
-                                        "int32",
                                     )
                                     + 1,
                                     39,
@@ -274,12 +278,12 @@ def bilinear_resize(
                             T.max(
                                 T.min(
                                     T.Cast(
+                                        "int32",
                                         T.floor(
-                                            (T.Cast(i3_1, "float32") + T.float32(0.5))
+                                            (T.Cast("float32", i3_1) + T.float32(0.5))
                                             * T.float32(0.5)
                                             - T.float32(0.5),
                                         ),
-                                        "int32",
                                     )
                                     + 1,
                                     39,
@@ -287,38 +291,36 @@ def bilinear_resize(
                                 0,
                             ),
                         ],
-                        "float32",
                     )
                     * (
-                        (T.Cast(i3_1, "float32") + T.float32(0.5)) * T.float32(0.5)
+                        (T.Cast("float32", i3_1) + T.float32(0.5)) * T.float32(0.5)
                         - T.float32(0.5)
                         - T.Cast(
+                            "float32",
                             T.Cast(
+                                "int32",
                                 T.floor(
-                                    (T.Cast(i3_1, "float32") + T.float32(0.5)) * T.float32(0.5)
+                                    (T.Cast("float32", i3_1) + T.float32(0.5)) * T.float32(0.5)
                                     - T.float32(0.5),
                                 ),
-                                "int32",
                             ),
-                            "float32",
                         )
                     )
                 )
                 * (
-                    (T.Cast(i2_1, "float32") + T.float32(0.5)) * T.float32(0.5)
+                    (T.Cast("float32", i2_1) + T.float32(0.5)) * T.float32(0.5)
                     - T.float32(0.5)
                     - T.Cast(
+                        "float32",
                         T.Cast(
+                            "int32",
                             T.floor(
-                                (T.Cast(i2_1, "float32") + T.float32(0.5)) * T.float32(0.5)
+                                (T.Cast("float32", i2_1) + T.float32(0.5)) * T.float32(0.5)
                                 - T.float32(0.5),
                             ),
-                            "int32",
                         ),
-                        "float32",
                     )
                 ),
-                "float16",
             )
 
 
@@ -326,26 +328,28 @@ def bilinear_resize(
 def cached_bilinear_resize(
     x: T.Tensor((1, 3, 40, 40), "float16"), resize: T.Tensor((1, 3, 80, 80), "float16")
 ):
-    index_var_0 = Ts.sblock_alloc_tensor([80], dtype="float32", strides=[1])
-    index_var_1 = Ts.sblock_alloc_tensor([80], dtype="int32", strides=[1])
-    index_var_2 = Ts.sblock_alloc_tensor([80], dtype="int32", strides=[1])
+    index_var_0 = Ts.sblock_alloc_tensor(
+        [80], dtype="float32", layout=T.TileLayout(T.S[[80] : [1]])
+    )
+    index_var_1 = Ts.sblock_alloc_tensor([80], dtype="int32", layout=T.TileLayout(T.S[[80] : [1]]))
+    index_var_2 = Ts.sblock_alloc_tensor([80], dtype="int32", layout=T.TileLayout(T.S[[80] : [1]]))
     for ax0 in T.serial(80):
         with Ts.sblock("index_0"):
             v0 = Ts.axis.spatial(80, ax0)
             Ts.reads()
             Ts.writes(index_var_0[v0])
             index_var_0[v0] = (
-                (T.Cast(v0, "float32") + T.float32(0.5)) * T.float32(0.5)
+                (T.Cast("float32", v0) + T.float32(0.5)) * T.float32(0.5)
                 - T.float32(0.5)
                 - T.Cast(
+                    "float32",
                     T.Cast(
+                        "int32",
                         T.floor(
-                            (T.Cast(v0, "float32") + T.float32(0.5)) * T.float32(0.5)
+                            (T.Cast("float32", v0) + T.float32(0.5)) * T.float32(0.5)
                             - T.float32(0.5),
                         ),
-                        "int32",
                     ),
-                    "float32",
                 )
             )
     for ax0 in T.serial(80):
@@ -354,10 +358,10 @@ def cached_bilinear_resize(
             Ts.reads()
             Ts.writes(index_var_1[v0])
             index_var_1[v0] = T.Cast(
-                T.floor(
-                    (T.Cast(v0, "float32") + T.float32(0.5)) * T.float32(0.5) - T.float32(0.5),
-                ),
                 "int32",
+                T.floor(
+                    (T.Cast("float32", v0) + T.float32(0.5)) * T.float32(0.5) - T.float32(0.5),
+                ),
             )
     for ax0 in T.serial(80):
         with Ts.sblock("index_2"):
@@ -365,10 +369,10 @@ def cached_bilinear_resize(
             Ts.reads()
             Ts.writes(index_var_2[v0])
             index_var_2[v0] = T.Cast(
-                T.floor(
-                    (T.Cast(v0, "float32") + T.float32(0.5)) * T.float32(0.5) - T.float32(0.5),
-                ),
                 "int32",
+                T.floor(
+                    (T.Cast("float32", v0) + T.float32(0.5)) * T.float32(0.5) - T.float32(0.5),
+                ),
             )
     for i0, i1, i2, i3 in T.grid(1, 3, 80, 80):
         with Ts.sblock("resize"):
@@ -376,64 +380,64 @@ def cached_bilinear_resize(
             Ts.reads(x[i0_1, i1_1, 0:40, 0:40])
             Ts.writes(resize[i0_1, i1_1, i2_1, i3_1])
             resize[i0_1, i1_1, i2_1, i3_1] = T.Cast(
+                "float16",
                 (
                     T.Cast(
+                        "float32",
                         x[
                             i0_1,
                             i1_1,
                             T.max(T.min(index_var_1[i2_1], 39), 0),
                             T.max(T.min(index_var_2[i3_1], 39), 0),
                         ],
-                        "float32",
                     )
                     * (T.float32(1) - index_var_0[i3_1])
                     + T.Cast(
+                        "float32",
                         x[
                             i0_1,
                             i1_1,
                             T.max(T.min(index_var_1[i2_1], 39), 0),
                             T.max(T.min(index_var_2[i3_1] + 1, 39), 0),
                         ],
-                        "float32",
                     )
                     * index_var_0[i3_1]
                 )
                 * (
                     T.float32(1)
                     - (
-                        (T.Cast(i2_1, "float32") + T.float32(0.5)) * T.float32(0.5)
+                        (T.Cast("float32", i2_1) + T.float32(0.5)) * T.float32(0.5)
                         - T.float32(0.5)
-                        - T.Cast(index_var_1[i2_1], "float32")
+                        - T.Cast("float32", index_var_1[i2_1])
                     )
                 )
                 + (
                     T.Cast(
+                        "float32",
                         x[
                             i0_1,
                             i1_1,
                             T.max(T.min(index_var_1[i2_1] + 1, 39), 0),
                             T.max(T.min(index_var_2[i3_1], 39), 0),
                         ],
-                        "float32",
                     )
                     * (T.float32(1) - index_var_0[i3_1])
                     + T.Cast(
+                        "float32",
                         x[
                             i0_1,
                             i1_1,
                             T.max(T.min(index_var_1[i2_1] + 1, 39), 0),
                             T.max(T.min(index_var_2[i3_1] + 1, 39), 0),
                         ],
-                        "float32",
                     )
                     * index_var_0[i3_1]
                 )
                 * (
-                    (T.Cast(i2_1, "float32") + T.float32(0.5)) * T.float32(0.5)
+                    (T.Cast("float32", i2_1) + T.float32(0.5)) * T.float32(0.5)
                     - T.float32(0.5)
-                    - T.Cast(index_var_1[i2_1], "float32")
+                    - T.Cast("float32", index_var_1[i2_1])
                 ),
-                "float16",
             )
 
 

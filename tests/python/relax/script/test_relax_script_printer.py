@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import pytest
+import tvm_ffi
 from tvm_ffi.access_path import AccessPath
 
 import tvm
@@ -258,7 +259,7 @@ def test_function_return_tensor_loc():
 
 def test_function_dependent_shape_locs():
     n = tirx.Var("n", "int64")
-    cast = tirx.Cast(n, "int64")
+    cast = tirx.Cast("int64", n)
     x = relax.Var("x", relax.TensorType([cast], "float32"))
     ret_ty = relax.TensorType(dtype="float32", ndim=1)
     func = relax.Function([x, n], x, ret_ty=ret_ty).with_attr("global_symbol", "main")
@@ -286,7 +287,7 @@ def test_function_dependent_shape_locs():
         assert "Access path:" not in lines[definition_index]
         return lines[definition_index], lines[definition_index + 1]
 
-    expression = 'T.Cast(n, "int64")'
+    expression = 'T.Cast("int64", n)'
     definition, underline = render(cast_path)
     expression_start = definition.index(expression)
     assert underline[expression_start : expression_start + len(expression)] == "^" * len(expression)
@@ -299,7 +300,7 @@ def test_function_dependent_shape_locs():
     assert underline.strip() == "^" * len(expression)
 
     definition, underline = render(cast_path.attr("value"))
-    variable_start = definition.index(expression) + expression.index("n")
+    variable_start = definition.index(expression) + expression.rindex("n")
     assert underline[variable_start] == "^"
     assert underline.strip() == "^"
 
@@ -620,7 +621,7 @@ def test_primitive_bindings_roundtrip_without_prim_value_marker():
         return alias
 
     for show_all_ty in [False, True]:
-        source = func.script(show_all_ty=show_all_ty)
+        source = func.script(extra_config={"relax.show_all_ty": show_all_ty})
         assert "R.prim_value" not in source
         assert "plus_one: T.int64" in source
         assert "alias: T.int64" in source
@@ -639,7 +640,7 @@ def test_primitive_bindings_roundtrip_without_prim_value_marker():
 
 
 def test_data_type_imm():
-    obj = tvm_tirx.ir.DataTypeImm(tvm_tirx.DataType("float32"))
+    obj = tvm_tirx.ir.DataTypeImm(tvm_ffi.dtype("float32"))
     _assert_print_lines(obj, 'T.dtype("float32")')
 
 
@@ -1214,7 +1215,7 @@ def func(x: R.Tensor((128, 128), dtype="float32")) -> R.Tensor((128, 128), dtype
 def test_hide_inferable_ty():
     """Redundant type annotations can be omitted
 
-    When `show_all_ty=False`, TVMScript type annotations that
+    When `extra_config={"relax.show_all_ty": False}`, TVMScript type annotations that
     provide redundant type can be omitted.
     """
 
@@ -1246,7 +1247,7 @@ def test_hide_inferable_ty():
         return E
 
     _assert_print_lines(
-        func.script(show_all_ty=False),
+        func.script(extra_config={"relax.show_all_ty": False}),
         """
 from __future__ import annotations
 
@@ -1284,7 +1285,7 @@ def relax_extern_func():
 def test_extern_func_roundtrip(show_all_ty):
     original = relax_extern_func()
     after_roundtrip = tvm_tirx.script.from_source(
-        original.script(show_meta=True, show_all_ty=show_all_ty),
+        original.script(show_meta=True, extra_config={"relax.show_all_ty": show_all_ty}),
         extra_vars={
             "I": tvm_tirx.script.ir,
             "T": tvm_tirx.script.tirx,

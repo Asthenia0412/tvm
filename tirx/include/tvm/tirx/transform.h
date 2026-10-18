@@ -21,8 +21,8 @@
  * \file tvm/tirx/transform.h
  * \brief TIR specific transformation passes.
  */
-#ifndef TVM_TIR_TRANSFORM_H_
-#define TVM_TIR_TRANSFORM_H_
+#ifndef TVM_TIRX_TRANSFORM_H_
+#define TVM_TIRX_TRANSFORM_H_
 
 #include <tvm/ir/function.h>
 #include <tvm/ir/prim/expr.h>
@@ -172,7 +172,7 @@ TVM_TIRX_DLL Pass MakePackedAPI();
  * lowers host-to-device calls into the device kernel launch ABI.
  *
  * The resulting host-side function will keep the same
- * `tvm::attr::kTarget` attribute (e.g. `T.target("cuda",
+ * `tvm::attr::kTarget.name` attribute (e.g. `T.target("cuda",
  * host=T.target("llvm"))`).  This ensures that `MakePackedAPI` knows
  * which device type should be used for the input tensors.
  *
@@ -190,11 +190,6 @@ TVM_TIRX_DLL Pass SplitHostDevice();
  * \return The pass.
  */
 TVM_TIRX_DLL Pass SkipAssert();
-
-/*!
- * \brief This annotation is for nodes to be disabled for builtin lowering
- */
-static constexpr const char* kDisableLowerTVMBuiltin = "disable_lower_builtin";
 
 /*!
  * \brief Lower builtin intrinsics.
@@ -312,19 +307,16 @@ TVM_TIRX_DLL Pass Filter(ffi::TypedFunction<bool(Function)> fcond);
 TVM_TIRX_DLL Pass TileDispatch();
 
 /*!
- * \brief Finalize TIRx lowering by applying layout rewriters and cleanup passes.
+ * \brief Apply tensor layouts to physical storage and accesses.
+ *
+ * Run after TileDispatch for generic tile compilation, or independently on
+ * already dispatched IR. Backend-specific layout lowering may replace this pass.
  * \return The pass.
  */
-TVM_TIRX_DLL Pass LowerTIRxCleanup();
-
-/*!
- * \brief Lower the TIR to a lower level IR for the given target.
- * \return The pass.
- */
-TVM_TIRX_DLL Pass LowerTIRx();
+TVM_TIRX_DLL Pass LowerTensorLayouts();
 
 }  // namespace transform
 }  // namespace tirx
 }  // namespace tvm
 
-#endif  // TVM_TIR_TRANSFORM_H_
+#endif  // TVM_TIRX_TRANSFORM_H_

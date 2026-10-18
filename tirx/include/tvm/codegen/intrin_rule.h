@@ -65,19 +65,18 @@ struct Direct {
  * For example, an off-tree backend can register a C math mapping with
  * `OpDef("prim.exp").set_attr<tirx::FLowerIntrinsic>(
  *     "my_backend.FLowerIntrinsic", DispatchPureExtern<FloatSuffix>)` after
- * including tvm/tirx/op_attr_types.h.
+ * including tvm/tirx/op/attr.h.
  * \tparam dtype_from_arg Use the argument type of a unary call instead of its result type.
  */
 template <typename T, bool dtype_from_arg = false>
 inline PrimExpr DispatchPureExtern(const PrimExpr& e) {
   const CallNode* call = e.as<CallNode>();
   TVM_FFI_ICHECK(call != nullptr);
-  // Both primitive and TIRx intrinsic names use a five-character namespace prefix.
+  // Primitive intrinsic names use the prim. namespace prefix.
   const OpNode* op = call->op.as<OpNode>();
   TVM_FFI_ICHECK(op != nullptr);
   std::string name = op->name;
-  TVM_FFI_ICHECK(name.substr(0, 5) == "tirx." || name.substr(0, 5) == "prim.")
-      << "Unexpected intrinsic name: " << name;
+  TVM_FFI_ICHECK(name.substr(0, 5) == "prim.") << "Unexpected intrinsic name: " << name;
   if (dtype_from_arg) {
     TVM_FFI_ICHECK_EQ(call->args.size(), 1U);
   }

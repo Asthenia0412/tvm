@@ -31,20 +31,20 @@ from tvm_tirx.ir import const
 from .tensor import (
     TensorType,
     tensor_data_ptr,
-    decl_tensor,
     is_tensor_var,
 )
 from .type import TensorMapType
 from .expr import convert
-from .expr import Var, FloatImm, IntImm, Cast
+from .expr import Var, Cast
 from .expr import Add, Sub, Mul, Div, Mod, FloorDiv, FloorMod
 from .expr import LShift, RShift, BitwiseAnd, BitwiseOr, BitwiseXor, BitwiseNot
 from .expr import Min, Max, EQ, NE, LT, LE, GT, GE, And, Or, Not
-from .expr import Select, TensorLoad, Ramp, Broadcast, Shuffle
-from .expr import CallEffectKind, Let
+from .expr import Select
+from .expr import Let
 
 
-from .function import Function, IndexMap, renew_def
+from .function import Function, renew_def
+from .index_map import IndexMap
 
 from .op import call_packed_lowered, call_cpacked_lowered, register_intrin_lowering
 from .op import call_packed, call_cpacked, call_intrin, call_pure_extern, call_extern
@@ -84,7 +84,6 @@ from .thread_scope import ThreadScope
 from .layout import TileLayout, Layout, ComposeLayout
 from . import transform
 from . import analysis
-from . import backend
 
 # Compiler-only submodules. Skip under `TVM_USE_RUNTIME_LIB=1` since they
 # perform compiler-side FFI at module load (schema engine looks up
@@ -98,12 +97,6 @@ if not _RUNTIME_ONLY_TIRX:
         get_default_tir_pipeline,
         register_tir_pipeline,
     )
-
-import tvm_tirx.script
-
-tvm_tirx.script.register_dialect(
-    "tirx", "tvm_tirx.tirx.script", builder_path="tvm_tirx.tirx.script.ir_builder"
-)
 
 
 def _check_script_module(module: "tvm_tirx.ir.IRModule") -> None:

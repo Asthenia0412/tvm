@@ -27,8 +27,10 @@ the PTX text, or the offset-scaling ``cp.async`` form the legacy
 
 import re
 
+import tvm_ffi
+
 from tvm_tirx import ir
-from tvm_tirx.backend.cuda.op import cuda_func_call
+from tvm_tirx.backend.cuda.op import func_call
 from tvm_tirx.runtime import MemoryScope
 
 from ..codegen.registry import CODEGEN_REGISTRY, register_codegen
@@ -156,8 +158,8 @@ def _wait_until_forward(spelling, *args):
     return CODEGEN_REGISTRY[call.op.name](call.args)
 
 
-@register_codegen("cuda_wait_until")
-def cuda_wait_until(dst, ptr, condition, scope, space, ptx_type, backoff_ns):
+@register_codegen("cuda.wait_until")
+def wait_until(dst, ptr, condition, scope, space, ptx_type, backoff_ns):
     """Lower a declared wait to a pre-tested loop around one scoped load."""
     scope, space, ptx_type = (parse_str(x) for x in (scope, space, ptx_type))
     dtype = _wait_until_thread_local_scalar(dst, "wait_until")
@@ -258,7 +260,7 @@ def cuda_wait_until(dst, ptr, condition, scope, space, ptx_type, backoff_ns):
             f"{closing} }} while (0)\n"
         )
         operands = (condition, backoff_ns)
-    return cuda_func_call(name, *load_call.args[1:-1], *operands, source), tags
+    return func_call(name, *load_call.args[1:-1], *operands, source), tags
 
 
 # =============================================================================
@@ -287,7 +289,7 @@ def _mbarrier_wait_parts(barrier, *_rest):
 
 
 device_intrinsic(
-    "cuda_mbarrier_wait",
+    "cuda.mbarrier_wait",
     helper_name=lambda *a: f"tvm_builtin_cuda_mbarrier_wait{_mbarrier_wait_parts(*a)[0]}",
     c_signature=lambda *a: _mbarrier_wait_parts(*a)[1],
     body=lambda *a: (
@@ -309,7 +311,7 @@ device_intrinsic(
 # mbarrier.try_wait.parity.acquire.cluster — cluster-scope acquire wait used for
 # cross-CTA barrier handshakes (e.g. the tmem-finished handoff).
 device_intrinsic(
-    "cuda_mbarrier_wait_acquire_cluster",
+    "cuda.mbarrier_wait_acquire_cluster",
     c_signature="(void* barrier, int phase)",
     body=(
         "    unsigned int barrier_addr_int = __cvta_generic_to_shared(barrier);\n"
@@ -331,11 +333,11 @@ device_intrinsic(
 # Cluster / warpgroup barriers — open-coded arrive+wait and ``bar.sync``.
 # =============================================================================
 device_intrinsic(
-    "cuda_cluster_sync",
+    "cuda.cluster_sync",
     body=('    asm("barrier.cluster.arrive.aligned;");\n    asm("barrier.cluster.wait.aligned;");'),
 )
 device_intrinsic(
-    "cuda_warpgroup_sync",
+    "cuda.warpgroup_sync",
     c_signature="(int name_bar_id)",
     body='    asm volatile("bar.sync %0, 128;" : : "r"(name_bar_id));',
 )
@@ -364,7 +366,7 @@ def _cuda_mov_sreg_body(bits):
 
 for _bits in (32, 64):
     device_intrinsic(
-        f"cuda_mov_sreg_{_bits}",
+        f"cuda.mov_sreg_{_bits}",
         n_attrs=1,
         helper_name=(
             lambda *a, bits=_bits: (
@@ -378,13 +380,13 @@ for _bits in (32, 64):
 del _bits
 
 
-@register_codegen("cuda_mov_sreg")
+@register_codegen("cuda.mov_sreg")
 def codegen_cuda_mov_sreg(bits, reg):
     bits = int(bits)
     reg = parse_str(reg)
     if bits not in (32, 64):
-        raise ValueError(f"Only support 32/64 bits for cuda_mov_sreg, but got {bits}.")
-    result = CODEGEN_REGISTRY[f"tirx.cuda_mov_sreg_{bits}"]([reg])
+        raise ValueError(f"Only support 32/64 bits for mov_sreg, but got {bits}.")
+    result = CODEGEN_REGISTRY[f"tirx.cuda.mov_sreg_{bits}"]([reg])
     return result[0] if isinstance(result, tuple) else result
 
 
@@ -394,27 +396,27 @@ def codegen_cuda_mov_sreg(bits, reg):
 # based on the operand's runtime dtype.
 # =============================================================================
 device_intrinsic(
-    "cuda_wgmma_noop_barrier_uint32",
+    "cuda.wgmma_noop_barrier_uint32",
     helper_name="ptx_wgmma_fence_uint32_t",
     c_signature="(uint32_t reg)",
     body='    asm volatile("" : "+r"(reg) :: "memory");',
 )
 device_intrinsic(
-    "cuda_wgmma_noop_barrier_float32",
+    "cuda.wgmma_noop_barrier_float32",
     helper_name="ptx_wgmma_fence_float",
     c_signature="(float reg)",
     body='    asm volatile("" : "+f"(reg) :: "memory");',
 )
 
 
-@register_codegen("cuda_wgmma_noop_barrier")
+@register_codegen("cuda.wgmma_noop_barrier")
 def codegen_cuda_wgmma_noop_barrier(reg):
     dtype = str(reg.dtype)
     dtype_enum = PTXDataType.from_string(dtype)
     if dtype_enum == PTXDataType.UINT32:
-        op_name = "tirx.cuda_wgmma_noop_barrier_uint32"
+        op_name = "tirx.cuda.wgmma_noop_barrier_uint32"
     elif dtype_enum == PTXDataType.FLOAT32:
-        op_name = "tirx.cuda_wgmma_noop_barrier_float32"
+        op_name = "tirx.cuda.wgmma_noop_barrier_float32"
     else:
         raise ValueError(f"Only support uint32/float32 for wgmma_fence, but got {dtype}.")
     result = CODEGEN_REGISTRY[op_name]([reg])
@@ -425,7 +427,7 @@ def codegen_cuda_wgmma_noop_barrier(reg):
 # The raw cp.async op behind ``InjectPTXAsyncCopy``. All user-issued
 # cp.async / cp.async.bulk copies go through ``T.ptx`` instead.
 # =============================================================================
-@register_codegen("s_tir_cp_async_raw")
+@register_codegen("s_tir.cp_async_raw")
 def codegen_s_tir_cp_async_raw(*args):
     """The raw cp.async op InjectPTXAsyncCopy emits (new copies are ptx).
 
@@ -447,8 +449,6 @@ def codegen_s_tir_cp_async_raw(*args):
         # PTX plain form for both .ca and .cg is just
         # ``cp.async.<v>.shared.global [dst], [src], cp_size;`` — three
         # operands, no trailing src-size / cache-policy.
-        from tvm_tirx import DataType
-
         dst_ptr_in, dst_offset, src_ptr_in, src_offset, cp_size = args[:5]
         predicate = args[5] if len(args) == 6 else -1
         cp_size_v = int(cp_size)
@@ -467,7 +467,7 @@ def codegen_s_tir_cp_async_raw(*args):
             et = ta.element_type
             if not hasattr(et, "dtype"):
                 return 1
-            bits = DataType(str(et.dtype)).bits
+            bits = tvm_ffi.dtype(str(et.dtype)).bits
             assert bits % 8 == 0, f"non-byte element dtype: {et.dtype}"
             return bits // 8
 
@@ -516,7 +516,7 @@ def codegen_s_tir_cp_async_raw(*args):
                 f"{body}\n"
                 "}\n"
             )
-            return cuda_func_call(
+            return func_call(
                 func_name,
                 dst_ptr_in,
                 dst_offset,
@@ -541,7 +541,7 @@ def codegen_s_tir_cp_async_raw(*args):
             f"{body}\n"
             "}\n"
         )
-        return cuda_func_call(
+        return func_call(
             func_name,
             dst_ptr_in,
             dst_offset,

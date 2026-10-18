@@ -108,8 +108,12 @@ def test_rvv_vscale_llvm_dbginfo(target):
         pytest.skip(f"{target} not enabled")
 
     # fmt: off
+    rvv_with_vscale_a_offset = T.dynamic("rvv_with_vscale_a_offset", "int32")
+    rvv_with_vscale_b_offset = T.dynamic("rvv_with_vscale_b_offset", "int32")
+    rvv_with_vscale_c_offset = T.dynamic("rvv_with_vscale_c_offset", "int32")
+
     @T.function
-    def rvv_with_vscale(A: T.Tensor((8,), dtype='float32', align=4, offset_factor=1, elem_offset=T.int32()), B: T.Tensor((4, 8), dtype='float32', align=4, offset_factor=1, elem_offset=T.int32(), strides=[8, 1]), C: T.Tensor((4,), dtype='float32', align=4, offset_factor=1, elem_offset=T.int32())):
+    def rvv_with_vscale(A: T.Tensor((8,), dtype='float32', align=4,  layout=T.TileLayout(T.S[(8,)] + (rvv_with_vscale_a_offset))), B: T.Tensor((4, 8), dtype='float32', align=4,   layout=T.TileLayout(T.S[(4, 8) : [8, 1]] + (rvv_with_vscale_b_offset))), C: T.Tensor((4,), dtype='float32', align=4,  layout=T.TileLayout(T.S[(4,)] + (rvv_with_vscale_c_offset)))):
 
         zero = T.call_llvm_intrin( 'llvm.riscv.vfmv.v.f', T.Broadcast(T.float32(0.0), T.vscale() * 2), C[0], T.uint64(1), ty='float32xvscalex2')
         vec_A = T.call_llvm_intrin( 'llvm.riscv.vle', T.Broadcast(T.float32(0.0), T.vscale() * 4), A.ptr_to([0] * len(A.shape)), T.int64(8), ty='float32xvscalex4')
@@ -118,7 +122,7 @@ def test_rvv_vscale_llvm_dbginfo(target):
         redsum = T.call_llvm_intrin( 'llvm.riscv.vfredusum', T.Broadcast(T.float32(0.0), T.vscale() * 2), prod, zero, T.uint64(7), T.uint64(8), ty='float32xvscalex2')
     # fmt: on
 
-    # tvm.error.InternalError: Can't fetch the lanes of a scalable vector at a compile time.
+    # tvm.RuntimeError: Can't fetch the lanes of a scalable vector at a compile time.
     with tvm_tirx.target.Target(target):
         f = tvm_tirx.tirx.compile(rvv_with_vscale, target).mod
 

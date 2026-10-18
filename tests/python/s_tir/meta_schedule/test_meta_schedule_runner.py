@@ -25,6 +25,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+import tvm_ffi
 from tvm_ffi import register_global_func
 
 pytest.importorskip("tornado")  # tvm.rpc.tracker (LocalRPC) requires tornado
@@ -60,10 +61,10 @@ from tvm.s_tir.meta_schedule.utils import (
     get_global_func_with_default_on_worker,
 )
 from tvm.s_tir.utils import derived_object
-from tvm_tirx.runtime import Device, Module
+from tvm_tirx.ir import FloatImm
+from tvm_tirx.runtime import Device
 from tvm_tirx.script import tirx as T
 from tvm_tirx.target import Target
-from tvm_tirx.tirx import FloatImm
 
 MATMUL_N = 16
 MATMUL_M = 32
@@ -643,21 +644,22 @@ def test_meta_schedule_runner_matmul_test():
 
     def test_run_evaluator(
         session: RPCSession,  # pylint: disable=unused-argument
-        rt_mod: Module,
+        rt_mod: tvm_ffi.Module,
         device: Device,
         evaluator_config: EvaluatorConfig,
         repeated_args: list[Any],
     ) -> list[float]:
         global repeated_args_before  # pylint: disable=global-variable-undefined, invalid-name
         repeated_args_after = []
-        evaluator = rt_mod.time_evaluator(
+        evaluator = tvm.runtime.time_evaluator(
+            rt_mod,
             func_name=rt_mod.entry_name,
-            dev=device,
+            device=device,
             number=evaluator_config.number,
             repeat=evaluator_config.repeat,
             min_repeat_ms=evaluator_config.min_repeat_ms,
             f_preproc=(
-                "cache_flush_cpu_non_first_arg" if evaluator_config.enable_cpu_cache_flush else ""
+                "runtime.CacheFlushCPUArguments" if evaluator_config.enable_cpu_cache_flush else ""
             ),
         )
         repeated_costs: list[list[float]] = []
@@ -756,21 +758,22 @@ def test_meta_schedule_runner_add_test():
 
     def test_run_evaluator(
         session: RPCSession,  # pylint: disable=unused-argument
-        rt_mod: Module,
+        rt_mod: tvm_ffi.Module,
         device: Device,
         evaluator_config: EvaluatorConfig,
         repeated_args: list[Any],
     ) -> list[float]:
         global repeated_args_before  # pylint: disable=global-variable-undefined, invalid-name
         repeated_args_after = []
-        evaluator = rt_mod.time_evaluator(
+        evaluator = tvm.runtime.time_evaluator(
+            rt_mod,
             func_name=rt_mod.entry_name,
-            dev=device,
+            device=device,
             number=evaluator_config.number,
             repeat=evaluator_config.repeat,
             min_repeat_ms=evaluator_config.min_repeat_ms,
             f_preproc=(
-                "cache_flush_cpu_non_first_arg" if evaluator_config.enable_cpu_cache_flush else ""
+                "runtime.CacheFlushCPUArguments" if evaluator_config.enable_cpu_cache_flush else ""
             ),
         )
         repeated_costs: list[list[float]] = []
@@ -862,21 +865,22 @@ def test_meta_schedule_local_runner_add_test():
         return repeated_args
 
     def test_run_evaluator(
-        rt_mod: Module,
+        rt_mod: tvm_ffi.Module,
         device: Device,
         evaluator_config: EvaluatorConfig,
         repeated_args: list[Any],
     ) -> list[float]:
         global repeated_args_before  # pylint: disable=global-variable-undefined, invalid-name
         repeated_args_after = []
-        evaluator = rt_mod.time_evaluator(
+        evaluator = tvm.runtime.time_evaluator(
+            rt_mod,
             func_name=rt_mod.entry_name,
-            dev=device,
+            device=device,
             number=evaluator_config.number,
             repeat=evaluator_config.repeat,
             min_repeat_ms=evaluator_config.min_repeat_ms,
             f_preproc=(
-                "cache_flush_cpu_non_first_arg" if evaluator_config.enable_cpu_cache_flush else ""
+                "runtime.CacheFlushCPUArguments" if evaluator_config.enable_cpu_cache_flush else ""
             ),
         )
         repeated_costs: list[list[float]] = []

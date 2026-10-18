@@ -16,7 +16,10 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-/*! \brief Context and callbacks shared by tile operation dispatchers. */
+/*!
+ * \file tvm/tirx/tile/context.h
+ * \brief Context and callbacks shared by tile operation dispatchers.
+ */
 #ifndef TVM_TIRX_TILE_CONTEXT_H_
 #define TVM_TIRX_TILE_CONTEXT_H_
 
@@ -30,19 +33,20 @@ namespace tile {
 
 namespace callback {
 /*! \brief The allocation Bind statements requested by the operator. */
-constexpr const char* kPrivateAlloc = "private_alloc";
+inline constexpr ffi::reflection::AttrKey<ffi::Array<Bind>> kPrivateAlloc{"private_alloc"};
 /*! \brief The initialization statement of the operator.
  *  which will be inserted at the beginning of the kernel
  */
-constexpr const char* kDeviceInitStmt = "device_init_stmt";
+inline constexpr ffi::reflection::AttrKey<ffi::Array<Stmt>> kDeviceInitStmt{"device_init_stmt"};
 /*! \brief The initialization statement of the operator.
  *  which will be inserted at the beginning of the kernel
  */
-constexpr const char* kHostInitStmt = "host_init_stmt";
+inline constexpr ffi::reflection::AttrKey<ffi::Array<Stmt>> kHostInitStmt{"host_init_stmt"};
 /*! \brief Statements to be inserted after a specific tensor's definition (DeclTensor/AllocTensor).
  *  Stored as Map<TensorVar, ffi::Array<Stmt>>.
  */
-constexpr const char* kPostTensorDefStmt = "post_tensor_def_stmt";
+inline constexpr ffi::reflection::AttrKey<ffi::Map<TensorVar, ffi::Array<Stmt>>> kPostTensorDefStmt{
+    "post_tensor_def_stmt"};
 }  // namespace callback
 
 /*!

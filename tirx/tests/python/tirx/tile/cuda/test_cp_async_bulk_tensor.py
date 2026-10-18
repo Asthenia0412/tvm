@@ -31,10 +31,10 @@ import tvm_ffi
 import tvm_tirx
 import tvm_tirx.testing
 from tvm_tirx.backend.cuda.layout import mma_atom_layout, mma_atom_shape, mma_shared_layout
-from tvm_tirx.ir import PrimType, PtrType, Range, TensorRegion, TensorRegionType
+from tvm_tirx.ir import IntImm, PrimType, PtrType, Range, TensorRegion, TensorRegionType
 from tvm_tirx.script import tirx as T
 from tvm_tirx.sym import Analyzer
-from tvm_tirx.tirx import IntImm, Var
+from tvm_tirx.tirx import Var
 from tvm_tirx.tirx.layout import ComposeLayout, S, TileLayout
 from tvm_tirx.tirx.thread_scope import ThreadScope
 from tvm_tirx.tirx.tile.dispatch import DispatchContext, run_dispatch
@@ -842,48 +842,51 @@ def _original_addresses(kwargs):
 def _recipe_views(kwargs, recipe):
     """Declare the caller's explicit zero-copy aliases on the original storage."""
     dtype = kwargs.get("dtype", "float16")
-    bits = tvm_tirx.DataType(recipe.dtype).bits
-    original_bits = tvm_tirx.DataType(dtype).bits
+    bits = tvm_ffi.dtype(recipe.dtype).bits
+    original_bits = tvm_ffi.dtype(dtype).bits
     ga, sa = _original_addresses(kwargs)
     shape = tuple(reversed(recipe.dims))
     strides = tuple(reversed((1, *(s * 8 // bits for s in recipe.strides))))
     box = tuple(reversed(recipe.boxes))
-    g = tvm_tirx.tirx.decl_tensor(
-        kwargs["g_shape"], dtype, "global_storage", layout=kwargs.get("g_layout")
+    g = tvm_tirx.tirx.Var(
+        "global_storage",
+        tvm_tirx.tirx.TensorType(kwargs["g_shape"], dtype, layout=kwargs.get("g_layout")),
     )
     sshape = kwargs.get("s_shape", kwargs["g_shape"])
-    s = tvm_tirx.tirx.decl_tensor(
-        sshape,
-        dtype,
+    s = tvm_tirx.tirx.Var(
         "shared_storage",
-        scope="shared.dyn",
-        layout=kwargs.get("s_layout"),
-        data_alignment=1024,
+        tvm_tirx.tirx.TensorType(
+            sshape, dtype, scope="shared.dyn", layout=kwargs.get("s_layout"), data_alignment=1024
+        ),
     )
-    gv = tvm_tirx.tirx.decl_tensor(
-        shape, recipe.dtype, "global_view", data=g.data, layout=_plain_layout(shape, strides)
+    gv = tvm_tirx.tirx.Var(
+        "global_view",
+        tvm_tirx.tirx.TensorType(
+            shape, recipe.dtype, data=g.data, layout=_plain_layout(shape, strides)
+        ),
     )
     assert int(sa.min()) * original_bits % bits == 0
     base = int(sa.min()) * original_bits // bits
-    layout = _plain_layout(box)
+    layout = TileLayout(S[box] + base)
     if recipe.enums[1]:
         layout = ComposeLayout(7 - int(math.log2(bits)), recipe.enums[1], 3, layout)
-    sv = tvm_tirx.tirx.decl_tensor(
-        box,
-        recipe.dtype,
+    sv = tvm_tirx.tirx.Var(
         "shared_view",
-        data=s.data,
-        scope="shared.dyn",
-        layout=layout,
-        elem_offset=base,
-        data_alignment=1024,
+        tvm_tirx.tirx.TensorType(
+            box,
+            recipe.dtype,
+            data=s.data,
+            scope="shared.dyn",
+            layout=layout,
+            data_alignment=1024,
+        ),
     )
     # Compare address PAIRS, not separate address sets: a transpose can preserve
     # both sets while copying every element to the wrong destination.
     coords = np.indices(box, dtype=np.int64).reshape(len(box), -1)
     coords += np.asarray(tuple(reversed(recipe.coordinates)))[:, None]
     new_ga = np.sum(coords * np.asarray(strides)[:, None], axis=0)
-    new_sa = _address_array(layout, box, [(0, x) for x in box], base)
+    new_sa = _address_array(layout, box, [(0, x) for x in box])
 
     def bytes_at(address, width):
         return (address[:, None] * width + np.arange(width)[None, :]).reshape(-1)
@@ -940,23 +943,23 @@ def _direct(
     box=None,
     coords=None,
     s_region=None,
-    g_elem_offset=0,
-    s_elem_offset=0,
     sctx=None,
     **fields,
 ):
     s_shape = s_shape or g_shape
-    g = tvm_tirx.tirx.decl_tensor(
-        g_shape, dtype, "A", layout=g_layout or _plain_layout(g_shape), elem_offset=g_elem_offset
+    g = tvm_tirx.tirx.Var(
+        "A",
+        tvm_tirx.tirx.TensorType(g_shape, dtype, layout=g_layout or _plain_layout(g_shape)),
     )
-    s = tvm_tirx.tirx.decl_tensor(
-        s_shape,
-        dtype,
+    s = tvm_tirx.tirx.Var(
         "A_smem",
-        scope="shared.dyn",
-        layout=s_layout or _plain_layout(s_shape),
-        elem_offset=s_elem_offset,
-        data_alignment=1024,
+        tvm_tirx.tirx.TensorType(
+            s_shape,
+            dtype,
+            scope="shared.dyn",
+            layout=s_layout or _plain_layout(s_shape),
+            data_alignment=1024,
+        ),
     )
     box = box or tuple(e for _, e in s_region) if s_region else box or s_shape
     coords = coords or (0,) * len(box)
@@ -992,12 +995,20 @@ def test_explicit_rejects_unknown_or_nonunit_implicit_inner_stride(stride):
 
 
 def test_explicit_view_base_offset_is_encoded_without_coordinate_rewrite():
-    _, host, _ = _direct(_load(2), g_shape=(64, 64), g_elem_offset=8)
+    _, host, _ = _direct(_load(2), g_shape=(64, 64), g_layout=TileLayout(S[(64, 64)] + 8))
     signature = _encode_signature(_collect_encodes(host)[0])
     assert isinstance(signature["base"], tvm_tirx.ir.Call)
     assert signature["base"].op.name == "tirx.address_of"
     base = signature["base"].args[0]
-    assert int(base.source.ty.elem_offset) * 2 == 16
+    assert (
+        int(
+            base.source.ty.layout.apply(
+                *([0] * len(base.source.ty.shape)), shape=base.source.ty.shape
+            ).get("m", 0)
+        )
+        * 2
+        == 16
+    )
     assert _ints(base.indices) == (0, 0)
     assert _ints(signature["dims"]) == (64, 64)
 
@@ -1037,7 +1048,10 @@ def test_explicit_allows_different_operand_ranks_with_equal_payload_bytes():
             ],
         )
         mbar = T.decl_tensor(
-            dyn.data, ty_args=[T.Tensor((1,), "uint64", elem_offset=16, data=dyn.data)]
+            dyn.data,
+            ty_args=[
+                T.Tensor((1,), "uint64", layout=T.TileLayout(T.S[(1,)] + (16)), data=dyn.data)
+            ],
         )
         T.cuda.tile.apply(
             T.ptx[
@@ -1056,7 +1070,9 @@ def test_explicit_allows_different_operand_ranks_with_equal_payload_bytes():
 def _lower_module(func, arch="sm_100a"):
     target = tvm_tirx.target.Target({"kind": "cuda", "arch": arch})
     with target:
-        return tvm_tirx.tirx.transform.LowerTIRx()(tvm_tirx.IRModule({"main": func}))
+        return tvm_tirx.ir.transform.Sequential(
+            [tvm_tirx.tirx.transform.TileDispatch(), tvm_tirx.tirx.transform.LowerTensorLayouts()]
+        )(tvm_tirx.IRModule({"main": func}))
 
 
 def _compile_module(func, arch="sm_100a"):
@@ -1187,9 +1203,12 @@ def test_caller_descriptor_view_preserves_original_addresses(kwargs, recipe):
 def test_caller_explicit_issue_coordinates_and_pointer():
     # Original shape/layout retained, now explicitly ask for 512 one-row boxes.
     shape = (512, 64)
-    g = tvm_tirx.tirx.decl_tensor(shape, "float16", "A", layout="default")
-    s = tvm_tirx.tirx.decl_tensor(
-        (512, 1, 64), "float16", "S", scope="shared", layout="default", data_alignment=128
+    g = tvm_tirx.tirx.Var("A", tvm_tirx.tirx.TensorType(shape, "float16", layout="default"))
+    s = tvm_tirx.tirx.Var(
+        "S",
+        tvm_tirx.tirx.TensorType(
+            (512, 1, 64), "float16", scope="shared", layout="default", data_alignment=128
+        ),
     )
     impl, host, _ = _emit(_load(2), g, s, box=(1, 64), coords=(0, 0), coord_steps=((1, 0),))
     assert _count_tma(impl).total == 512
@@ -1222,7 +1241,7 @@ def test_dynamic_global_dimension_and_coordinates_remain_runtime_values():
     sig = _encode_signature(_collect_encodes(host)[0])
     assert Analyzer().can_prove_equal(sig["dims"][1], seq_len * T.uint32(64))
     _, operands = _ptx_call_parts(_count_tma(impl).calls[0])
-    tvm_tirx.ir.assert_structural_equal(operands["coords"][1], T.cast(row, "int32"))
+    tvm_tirx.ir.assert_structural_equal(operands["coords"][1], T.cast(row, ty="int32"))
 
 
 @pytest.mark.parametrize(
@@ -1491,11 +1510,17 @@ def test_caller_dynamic_stage_coordinates_and_pointer():
             stage: Range.from_min_extent(0, 3),
         }
     )
-    gv = tvm_tirx.tirx.decl_tensor(
-        (32, 4096, 64), "float16", "G", layout=_plain_layout((32, 4096, 64), (64, 2048, 1))
+    gv = tvm_tirx.tirx.Var(
+        "G",
+        tvm_tirx.tirx.TensorType(
+            (32, 4096, 64), "float16", layout=_plain_layout((32, 4096, 64), (64, 2048, 1))
+        ),
     )
-    sv = tvm_tirx.tirx.decl_tensor(
-        (3, 2, 128, 64), "float16", "S", scope="shared", layout="default", data_alignment=128
+    sv = tvm_tirx.tirx.Var(
+        "S",
+        tvm_tirx.tirx.TensorType(
+            (3, 2, 128, 64), "float16", scope="shared", layout="default", data_alignment=128
+        ),
     )
     impl, host, _ = _emit(
         _load(3),
@@ -1636,27 +1661,27 @@ def _build_sparse_decode_qo_tma_regression():
             ],
         )
         ts = T.decl_tensor(
-            dyn.data,
+            T.ptr_byte_offset(dyn.data, q_elements * 2, ty=T.Ptr("bfloat16", "shared.dyn")),
             ty_args=[
                 T.Tensor(
                     (64, 64),
                     "bfloat16",
                     scope="shared.dyn",
                     layout=tail_layout,
-                    elem_offset=q_elements,
                     align=1024,
                 )
             ],
         )
         os = T.decl_tensor(
-            dyn.data,
+            T.ptr_byte_offset(
+                dyn.data, (q_elements + tail_elements) * 2, ty=T.Ptr("bfloat16", "shared.dyn")
+            ),
             ty_args=[
                 T.Tensor(
                     (64, 512),
                     "bfloat16",
                     scope="shared.dyn",
                     layout=q_layout,
-                    elem_offset=q_elements + tail_elements,
                     align=1024,
                 )
             ],
@@ -1668,8 +1693,7 @@ def _build_sparse_decode_qo_tma_regression():
                     (1,),
                     "uint64",
                     scope="shared.dyn",
-                    layout="default",
-                    elem_offset=shared_bytes // 8,
+                    layout=T.TileLayout(T.S[(1,)] + (shared_bytes // 8)),
                 )
             ],
         )
@@ -1908,14 +1932,18 @@ def test_caller_tiles_nested_shared_layout(case_id):
 
 def test_caller_explicit_strided_outer_issues():
     kwargs = next(p.values[1] for p in TMA_CASES if p.values[0] == "g2s-3d-stride-gap-outer")
-    g = tvm_tirx.tirx.decl_tensor(kwargs["g_shape"], "float16", "A", layout=kwargs["g_layout"])
-    s = tvm_tirx.tirx.decl_tensor(
-        (8, 1, 32, 64),
-        "float16",
+    g = tvm_tirx.tirx.Var(
+        "A", tvm_tirx.tirx.TensorType(kwargs["g_shape"], "float16", layout=kwargs["g_layout"])
+    )
+    s = tvm_tirx.tirx.Var(
         "S",
-        scope="shared",
-        layout=_plain_layout((8, 1, 32, 64), (4096, 0, 64, 1)),
-        data_alignment=128,
+        tvm_tirx.tirx.TensorType(
+            (8, 1, 32, 64),
+            "float16",
+            scope="shared",
+            layout=_plain_layout((8, 1, 32, 64), (4096, 0, 64, 1)),
+            data_alignment=128,
+        ),
     )
     impl, _, _ = _emit(_load(3), g, s, box=(1, 32, 64), coords=(0, 0, 0), coord_steps=((1, 0, 0),))
     assert _count_tma(impl).total == 8
@@ -1950,9 +1978,14 @@ def test_descriptor_cache_distinguishes_explicit_dtype_views():
     data = Var("A", PtrType(PrimType("uint8"), "global"))
     sctx = _context()
     for dtype in ("uint8", "uint16"):
-        g = tvm_tirx.tirx.decl_tensor((256,), dtype, "A_view", data=data, layout="default")
-        s = tvm_tirx.tirx.decl_tensor(
-            (256,), dtype, "S", scope="shared", layout="default", data_alignment=128
+        g = tvm_tirx.tirx.Var(
+            "A_view", tvm_tirx.tirx.TensorType((256,), dtype, data=data, layout="default")
+        )
+        s = tvm_tirx.tirx.Var(
+            "S",
+            tvm_tirx.tirx.TensorType(
+                (256,), dtype, scope="shared", layout="default", data_alignment=128
+            ),
         )
         _emit(_load(1), g, s, box=(256,), coords=(0,), sctx=sctx)
         _emit(_load(1), g, s, box=(256,), coords=(0,), sctx=sctx)
@@ -2064,7 +2097,7 @@ def test_caller_stages_unaligned_shared_region(warp_offset):
     # Original offset-count regressions wrote at 32 + warp_offset*64 + 2*64
     # halfwords, which is 64 bytes off the native TMA alignment. Preserve the
     # destination through explicit aligned staging, then caller scalar stores.
-    layout = TileLayout(S[(4, 64)] + warp_offset * 64)
+    layout = TileLayout(S[(4, 64)] + warp_offset * 64 + 32)
     with pytest.raises(RuntimeError, match="128-byte aligned"):
         _direct(
             _load(2),
@@ -2072,7 +2105,6 @@ def test_caller_stages_unaligned_shared_region(warp_offset):
             s_shape=(4, 64),
             s_region=((2, 2), (0, 64)),
             s_layout=layout,
-            s_elem_offset=32,
         )
 
     @T.function
@@ -2082,11 +2114,7 @@ def test_caller_stages_unaligned_shared_region(warp_offset):
         backing = T.alloc_shared((512,), "float16", layout="default", align=128)
         target = T.decl_tensor(
             backing.data,
-            ty_args=[
-                T.Tensor(
-                    (4, 64), "float16", scope="shared", layout=layout, elem_offset=32, align=128
-                )
-            ],
+            ty_args=[T.Tensor((4, 64), "float16", scope="shared", layout=layout, align=128)],
         )
         stage = T.alloc_shared((2, 64), "float16", layout="default", align=128)
         mbar = T.alloc_shared((1,), "uint64", layout="default")

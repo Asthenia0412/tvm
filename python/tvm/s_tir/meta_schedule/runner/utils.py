@@ -20,8 +20,11 @@ import itertools
 from collections.abc import Callable
 from typing import Any
 
+import tvm_ffi
+
 import tvm_tirx.runtime
-from tvm_tirx.runtime import Device, Module
+from tvm.runtime import time_evaluator
+from tvm_tirx.runtime import Device
 
 from .config import EvaluatorConfig
 
@@ -87,7 +90,7 @@ def alloc_argument_common(
 
 
 def run_evaluator_common(
-    rt_mod: Module,
+    rt_mod: tvm_ffi.Module,
     device: Device,
     evaluator_config: EvaluatorConfig,
     repeated_args: list[T_ARGUMENT_LIST],
@@ -96,7 +99,7 @@ def run_evaluator_common(
 
     Parameters
     ----------
-    rt_mod: Module
+    rt_mod: tvm_ffi.Module
         The runtime module
     device: Device
         The device to run the evaluator
@@ -110,13 +113,14 @@ def run_evaluator_common(
     costs: List[float]
         The evaluator results
     """
-    evaluator = rt_mod.time_evaluator(
+    evaluator = time_evaluator(
+        rt_mod,
         func_name=rt_mod.entry_name,
-        dev=device,
+        device=device,
         number=evaluator_config.number,
         repeat=evaluator_config.repeat,
         min_repeat_ms=evaluator_config.min_repeat_ms,
-        f_preproc="cache_flush_cpu_non_first_arg"
+        f_preproc="runtime.CacheFlushCPUArguments"
         if evaluator_config.enable_cpu_cache_flush
         else "",
     )

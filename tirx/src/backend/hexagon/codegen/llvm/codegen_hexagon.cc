@@ -328,7 +328,7 @@ llvm::Value* CodeGenHexagon::VectorLookupLoad(TensorVar buffer, PrimType buffer_
   auto native_vector_bytes = native_vector_bits_ / 8;
 
   // Indexes
-  llvm::Value* trunc = MakeValue(prim::Cast(index, index_ty.WithBits(8)));
+  llvm::Value* trunc = MakeValue(prim::Cast(index_ty.WithBits(8), index));
   llvm::Value* index_pad = CreateVecPad(trunc, native_vector_bytes);
 
   // Values
@@ -479,8 +479,8 @@ ffi::Module BuildHexagon(IRModule mod, Target target) {
       continue;
     }
     auto f = kv.second.as_or_throw<Function>();
-    if (f->HasNonzeroAttr(tvm::tirx::attr::kIsEntryFunc)) {
-      auto global_symbol = f->GetAttr<ffi::String>(tvm::attr::kGlobalSymbol);
+    if (f->HasNonzeroAttr(tvm::tirx::attr::kIsEntryFunc.name)) {
+      auto global_symbol = f->GetAttr(tvm::attr::kGlobalSymbol);
       TVM_FFI_ICHECK(global_symbol.has_value());
       entry_func = global_symbol.value();
     }

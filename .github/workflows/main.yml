@@ -56,12 +56,12 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{ steps.env_vars.outputs.cpu_count }}
         run: |
           set -euxo pipefail
-          pip install scikit-build-core
-          export CMAKE_ARGS="-DUSE_LLVM=ON -DUSE_METAL=ON -DBUILD_TESTING=OFF"
+          pip install "scikit-build-core>=0.11" "setuptools-scm>=8"
+          export CMAKE_ARGS="-DTVM_TIRX_USE_LLVM=ON -DTVM_TIRX_USE_METAL=ON -DTVM_TIRX_BUILD_TESTS=OFF"
           pip wheel --no-deps -w dist ./tirx -v
-          export PIP_FIND_LINKS="$(pwd)/dist"
+          pip install --no-deps --force-reinstall dist/apache_tvm_tirx-*.whl
           export CMAKE_ARGS="-DBUILD_TESTING=OFF"
-          pip wheel --no-deps -w dist . -v
+          pip wheel --no-deps --no-build-isolation -w dist . -v
       - name: Install TIRx and TVM from wheels
         shell: bash -l {0}
         run: |
@@ -89,19 +89,19 @@ jobs:
         shell: bash -l {0}
         run: >-
           python -m pytest -v tests/python/all-platform-minimal-test tests/python/script
-          tirx/tests/python/all-platform-minimal-test tirx/tests/python/script
+          tirx/tests/python/runtime/test_validate_wheel_library.py tirx/tests/python/script
       - name: Minimal Metal Compile-Only
         shell: bash -l {0}
         run: |
           set -euxo pipefail
           python -m pytest -v -s 'tirx/tests/python/codegen/gpu_common/test_allreduce.py::test_allreduce_sum_compile'
-          python -m pytest -v -s 'tirx/tests/python/backend/metal/codegen/test_metal.py::test_func_with_trailing_pod_params'
+          python -m pytest -v -s 'tirx/tests/python/backend/metal/codegen/test_basic.py::test_func_with_trailing_pod_params'
       - name: Minimal Metal Compile-and-Run
         shell: bash -l {0}
         run: |
           set -euxo pipefail
           python -m pytest -v -s tirx/tests/python/backend/metal
-          python -m pytest -v -s 'tirx/tests/python/codegen/gpu_common/test_gpu_intrinsics.py'
+          python -m pytest -v -s 'tirx/tests/python/codegen/gpu_common/test_intrinsics.py'
           python -m pytest -v -s 'tirx/tests/python/codegen/gpu_common/test_allreduce.py::test_allreduce_sum[dims0-metal]'
 
   Windows:
@@ -121,12 +121,14 @@ jobs:
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{ steps.env_vars.outputs.cpu_count }}
         run: |
-          pip install scikit-build-core || exit /b 1
-          set CMAKE_ARGS=-DUSE_LLVM=ON -DBUILD_TESTING=OFF
+          pip install "scikit-build-core>=0.11" "setuptools-scm>=8" || exit /b 1
+          set CMAKE_ARGS=-DTVM_TIRX_USE_LLVM=ON -DTVM_TIRX_BUILD_TESTS=OFF
           pip wheel --no-deps -w dist ./tirx -v || exit /b 1
-          set PIP_FIND_LINKS=%CD%\dist
+          for %%w in (dist\apache_tvm_tirx-*.whl) do (
+            pip install --no-deps --force-reinstall "%%w" || exit /b 1
+          )
           set CMAKE_ARGS=-DBUILD_TESTING=OFF
-          pip wheel --no-deps -w dist . -v || exit /b 1
+          pip wheel --no-deps --no-build-isolation -w dist . -v || exit /b 1
           for %%w in (dist\*.whl) do (
             pip install --no-deps "%%w" || exit /b 1
           )
@@ -141,4 +143,4 @@ jobs:
         shell: cmd /C call {0}
         run: >-
           python -m pytest -v tests/python/all-platform-minimal-test tests/python/script
-          tirx/tests/python/all-platform-minimal-test tirx/tests/python/script
+          tirx/tests/python/runtime/test_validate_wheel_library.py tirx/tests/python/script

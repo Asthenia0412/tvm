@@ -119,7 +119,7 @@ def _build_tiled(Mt, Nt, Kt, kinst, *, beta=0.0, dtype="float16", store=False):
 
     With ``store=True`` the result is written back to a global tensor (a full
     kernel for codegen); otherwise only the ``T.cuda.tile.apply`` is emitted (for
-    ``LowerTIRx`` dispatch checks).
+    ``TileDispatch`` checks).
     """
     Dl, Al, Bl = _frag(Mt, Nt, Kt, kinst)
     M, N, K = 16 * Mt, 8 * Nt, kinst * Kt
@@ -444,13 +444,15 @@ def _build_transpose_numeric(transpose_A, transpose_B, dtype="float16"):
 
 def _lower(func):
     with tvm_tirx.target.Target("cuda"):
-        return tvm_tirx.tirx.transform.LowerTIRx()(tvm_tirx.IRModule({"main": func}))
+        return tvm_tirx.ir.transform.Sequential(
+            [tvm_tirx.tirx.transform.TileDispatch(), tvm_tirx.tirx.transform.LowerTensorLayouts()]
+        )(tvm_tirx.IRModule({"main": func}))
 
 
 def test_cuda_mma_sync_is_a_registered_instruction():
     op = tvm_tirx.ir.Op.get("tirx.cuda.tile.apply")
     assert callable(op.get_attr("FTileOpDispatch"))
-    assert op.get_attr("TCallEffectKind") == 3
+    assert op.get_attr("TCallEffectKind") == tvm_tirx.ir.CallEffectKind.UpdateState
 
 
 @pytest.mark.parametrize("dtype", ["bfloat16", "float16"])
@@ -480,7 +482,7 @@ def test_cuda_gemm_mma_lowers_to_mma_sync(dtype):
     for dst, value in zip(operands[:4], operands[10:14]):
         assert isinstance(value, tvm_tirx.ir.Call) and value.op.name.endswith("if_then_else")
         initial, previous = value.args[1:]
-        assert isinstance(initial, tvm_tirx.ir.prim.FloatImm) and initial.value == 0
+        assert isinstance(initial, tvm_tirx.ir.FloatImm) and initial.value == 0
         tvm_tirx.ir.assert_structural_equal(dst, previous)
 
 

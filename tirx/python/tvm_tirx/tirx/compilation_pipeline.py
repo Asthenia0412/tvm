@@ -19,10 +19,11 @@
 """The TIR backend compilation pipeline."""
 
 import inspect
+import os
 
 import tvm_tirx
 from tvm_tirx import tirx
-from tvm_tirx.backend.cuda import transforms as cuda_transforms
+from tvm_tirx.backend.cuda import transform as cuda_transform
 
 
 def default_tir_pipeline(*, target=None):
@@ -41,8 +42,11 @@ def tirx_pipeline(*, prepare_only=False, target=None):
         mod = _bind_target(mod, target)
         pass_ctx = tvm_tirx.ir.transform.PassContext.current()
         config = pass_ctx.config
-        passes = [
-            tirx.transform.LowerTIRx(),
+        passes = [tirx.transform.TileDispatch()]
+        if "TVM_PRINT_AFTER_TIRX_DISPATCH_OPS" in os.environ:
+            passes.append(tvm_tirx.ir.transform.PrintIR())
+        passes += [
+            tirx.transform.LowerTensorLayouts(),
             tirx.transform.StmtSimplify(),
             tirx.transform.FlattenTensor(),
             tirx.transform.NarrowDataType(32),
@@ -70,8 +74,8 @@ def _bind_target(mod, target):
     return tvm_tirx.ir.transform.Sequential(
         [
             tirx.transform.BindTarget(target),
-            cuda_transforms.BindBackendConfig(),
-            cuda_transforms.SpecializeEntryHelpers(),
+            cuda_transform.BindBackendConfig(),
+            cuda_transform.SpecializeEntryHelpers(),
         ]
     )(mod)
 
@@ -125,8 +129,8 @@ def finalize_tir_pipeline():
         [
             tirx.transform.AnnotateEntryFunc(),
             tirx.transform.SplitHostDevice(),
-            cuda_transforms.LowerIket(),
-            cuda_transforms.SpecializeDeviceHelpers(),
+            cuda_transform.LowerIket(),
+            cuda_transform.SpecializeDeviceHelpers(),
             tirx.transform.BF16ComputeLegalize(),
             tirx.transform.FP8ComputeLegalize(),
             tirx.transform.MakePackedAPI(),
@@ -151,12 +155,6 @@ def finalize_device_passes():  # pylint: disable=unused-argument
         tirx.transform.StmtSimplify(),
         tirx.transform.LowerIntrin(),
     ]
-    return tvm_tirx.ir.transform.Sequential(device_pass_list)
-
-
-def finalize_device_passes_tirx():  # pylint: disable=unused-argument
-    """The TIRx finalization passes for TIR backend."""
-    device_pass_list = [tirx.transform.LowerIntrin()]
     return tvm_tirx.ir.transform.Sequential(device_pass_list)
 
 

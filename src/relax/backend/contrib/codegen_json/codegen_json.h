@@ -241,6 +241,15 @@ class JSONSerializer : public relax::MemoizedExprTranslator<NodeEntries> {
   void serialize(Function func) {
     // First we convert all the parameters into input nodes.
     for (const auto& param : func->params) {
+      auto ty = GetType(param);
+      // Skip ShapeType params (e.g. tir_vars injected by FuseOps), since they
+      // are symbolic variable definitions, not actual tensor inputs. We still
+      // add them to the memo_ map (with empty entries) so that body expressions
+      // referencing these vars resolve to empty node entries rather than crashing.
+      if (ty->IsInstance<ShapeTypeNode>()) {
+        memo_[param] = NodeEntries{};
+        continue;
+      }
       auto node_ptr = std::make_shared<JSONGraphNode>(param->name, "input" /* op_type_ */);
       memo_[param] = AddNode(node_ptr, param);
     }
@@ -281,20 +290,30 @@ class JSONSerializer : public relax::MemoizedExprTranslator<NodeEntries> {
         const auto* tensor_ty = tuple_ty->fields[i].as<TensorTypeNode>();
         TVM_FFI_ICHECK(tensor_ty) << "Expect TensorType, but received: ."
                                   << tuple_ty->fields[i]->GetTypeKey();
-        TVM_FFI_ICHECK(tensor_ty->shape.has_value()) << "Expect shape to be defined.";
-        ShapeExpr output_shape = tensor_ty->shape.value().as_or_throw<ShapeExpr>();
+        if (tensor_ty->shape.has_value()) {
+          ShapeExpr output_shape = tensor_ty->shape.value().as_or_throw<ShapeExpr>();
+          shape.emplace_back(GetIntShape(output_shape->values));
+        } else {
+          // When shape is not known (e.g., Composite function return types from FuseOps),
+          // use -1 for each dimension as a placeholder for unknown/unknown dynamic dims.
+          shape.emplace_back(std::vector<int64_t>(tensor_ty->ndim, -1));
+        }
         ret.push_back(JSONGraphNodeEntry(node_id, i));
-        shape.emplace_back(GetIntShape(output_shape->values));
         dtype.emplace_back(DType2String(tensor_ty->dtype.value()->dtype));
       }
       node->SetNumOutput(tuple_ty->fields.size());
     } else {
       const auto* tensor_ty = ty.as<TensorTypeNode>();
       TVM_FFI_ICHECK(tensor_ty) << "Expect TensorType, but received: " << ty->GetTypeKey();
-      TVM_FFI_ICHECK(tensor_ty->shape.has_value()) << "Expect shape to be defined.";
-      ShapeExpr output_shape = tensor_ty->shape.value().as_or_throw<ShapeExpr>();
+      if (tensor_ty->shape.has_value()) {
+        ShapeExpr output_shape = tensor_ty->shape.value().as_or_throw<ShapeExpr>();
+        shape.emplace_back(GetIntShape(output_shape->values));
+      } else {
+        // When shape is not known (e.g., Composite function return types from FuseOps),
+        // use -1 for each dimension as a placeholder for unknown/unknown dynamic dims.
+        shape.emplace_back(std::vector<int64_t>(tensor_ty->ndim, -1));
+      }
 
-      shape.emplace_back(GetIntShape(output_shape->values));
       dtype.emplace_back(DType2String(tensor_ty->dtype.value()->dtype));
       ret.push_back(JSONGraphNodeEntry(node_id, 0));
     }
@@ -316,9 +335,9 @@ class JSONSerializer : public relax::MemoizedExprTranslator<NodeEntries> {
       extractor.Extract(const_cast<ffi::Object*>(call_attr));
     } else if (const auto* fn = cn->op.as<FunctionNode>()) {
       TVM_FFI_ICHECK(false);
-      auto pattern = fn->GetAttr<ffi::String>(tvm::relax::attr::kPartitionedFromPattern);
+      auto pattern = fn->GetAttr(tvm::relax::attr::kPartitionedFromPattern);
       TVM_FFI_ICHECK(pattern.has_value());
-      node->SetAttr(tvm::relax::attr::kPartitionedFromPattern, pattern.value());
+      node->SetAttr(tvm::relax::attr::kPartitionedFromPattern.name, pattern.value());
     }
   }
 
@@ -412,7 +431,7 @@ class JSONSerializer : public relax::MemoizedExprTranslator<NodeEntries> {
     if (const auto* op_node = cn->op.as<OpNode>()) {
       name = op_node->name;
     } else if (const auto* fn = cn->op.as<FunctionNode>()) {
-      auto comp = fn->GetAttr<ffi::String>(tvm::relax::attr::kComposite);
+      auto comp = fn->GetAttr(tvm::relax::attr::kComposite);
       TVM_FFI_ICHECK(comp.has_value()) << "JSON runtime only supports composite functions.";
       name = comp.value();
     } else {
@@ -442,7 +461,7 @@ class JSONSerializer : public relax::MemoizedExprTranslator<NodeEntries> {
   }
 
   NodeEntries VisitExpr_(const FunctionNode* fn) {
-    TVM_FFI_ICHECK(fn->GetAttr<ffi::String>(tvm::relax::attr::kComposite).has_value())
+    TVM_FFI_ICHECK(fn->GetAttr(tvm::relax::attr::kComposite).has_value())
         << "JSON runtime only supports composite functions";
 
     // FunctionNode should be handled by the caller.

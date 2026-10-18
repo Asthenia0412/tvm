@@ -47,6 +47,8 @@ namespace codegen {
 
 class CodeGenCUDAHost : public CodeGenCHost {
  public:
+  using CodeGenCHost::Dispatch_;
+
   void Init(Target target) {
     CodeGenCHost::Init(false, true, true, target->str(), {});
     // Retain C-host wrapper initialization, with an FFI/CUDA-only prelude.
@@ -152,9 +154,9 @@ class CodeGenCUDAHost : public CodeGenCHost {
     // last-error state so a subsequent successful launch is not blamed for it.
     stream << "  } catch (...) {\n    cudaGetLastError();\n    throw;\n  }\n"
            << "  TVM_FFI_SAFE_CALL_END();\n}\n\n";
-    if (auto symbol = func->GetAttr<ffi::String>(tvm::attr::kGlobalSymbol)) {
+    if (auto symbol = func->GetAttr(tvm::attr::kGlobalSymbol)) {
       function_names_.push_back(symbol.value());
-      if (func->HasNonzeroAttr(tvm::tirx::attr::kIsEntryFunc) && !has_tvm_ffi_main_func_) {
+      if (func->HasNonzeroAttr(tvm::tirx::attr::kIsEntryFunc.name) && !has_tvm_ffi_main_func_) {
         function_names_.push_back(ffi::symbol::tvm_ffi_main);
         PrintFuncPrefix(stream);
         PrintType(func->ret_type, stream);

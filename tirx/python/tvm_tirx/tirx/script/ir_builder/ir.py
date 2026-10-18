@@ -23,10 +23,13 @@ import threading
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from tvm_tirx import DataType, ir
+import tvm_ffi
+
+import tvm_tirx
+from tvm_tirx import ir
 from tvm_tirx import ir as _ir
 from tvm_tirx import tirx as tir
-from tvm_tirx.ir import Range, TensorRegion, Type
+from tvm_tirx.ir import FloatImm, IntImm, Range, TensorLoad, TensorRegion, Type
 from tvm_tirx.ir.location import UNKNOWN_LOC, Location
 from tvm_tirx.ir.type import _init_type_api, _normalize_type
 from tvm_tirx.runtime import MemoryScope
@@ -42,13 +45,6 @@ from tvm_tirx.target import Target
 
 # pylint: disable=unused-import
 from tvm_tirx.tirx import Expr, IndexMap, Var, is_tensor_var, tile
-
-# import tirx.expr for direct ir construction to pass structural_equal comparison
-from tvm_tirx.tirx.expr import (
-    FloatImm,
-    IntImm,
-    TensorLoad,
-)
 from tvm_tirx.tirx.layout import Axis, ComposeLayout, Iter, Layout, R, S, TileLayout
 from tvm_tirx.tirx.thread_scope import ThreadScope
 
@@ -84,17 +80,6 @@ def _normalize_prim_type(dtype) -> ir.PrimType:
         if isinstance(type_annotation, ir.PrimType):
             return type_annotation
     return ir.PrimType(dtype)
-
-
-def _get_elem_offset(elem_offset, byte_offset, dtype: str):
-    assert elem_offset is None or byte_offset is None, (
-        "elem_offset and byte_offset cannot be set at the same time"
-    )
-    if elem_offset is not None:
-        return elem_offset
-    if byte_offset is None:
-        return None
-    return byte_offset * 8 // (DataType(_normalize_prim_type(dtype).dtype).bits)
 
 
 _meta_construction_state = threading.local()
@@ -229,11 +214,11 @@ def alloc_tensor(
 
     def normalize(value):
         if isinstance(value, bool):
-            return tir.IntImm("bool", int(value))
+            return tvm_tirx.ir.IntImm("bool", int(value))
         if isinstance(value, int):
-            return tir.IntImm("int32", value)
+            return tvm_tirx.ir.IntImm("int32", value)
         if isinstance(value, float):
-            return tir.FloatImm("float32", value)
+            return tvm_tirx.ir.FloatImm("float32", value)
         return value
 
     if attrs is None:
@@ -246,10 +231,19 @@ def alloc_tensor(
     args = []
     if placement is not None:
         if not isinstance(placement, ir.Tuple):
-            placement = placement if isinstance(placement, list | tuple | ir.Array) else [placement]
+            placement = (
+                placement if isinstance(placement, list | tuple | tvm_ffi.Array) else [placement]
+            )
             placement = ir.Tuple([normalize(value) for value in placement])
         args.append(placement)
-    return ir.Call("tirx.alloc_tensor", args, attrs=attrs, ty_args=ty_args, loc=loc, ty=ty)
+    return ir.Call(
+        "tirx.alloc_tensor",
+        args,
+        attrs=attrs,
+        ty_args=ty_args,
+        loc=loc,
+        ty=ty,
+    )
 
 
 def _bind_tensor(value):
@@ -264,12 +258,8 @@ def _alloc_tensor(
     shape,
     dtype="float32",
     data=None,
-    strides=None,
-    elem_offset=None,
-    byte_offset=None,
     scope=_SCOPE_GLOBAL,
     align=-1,
-    offset_factor=0,
     layout=MISSING,
     allocated_addr=None,
     annotations=None,
@@ -279,7 +269,7 @@ def _alloc_tensor(
     if allocated_addr is not None:
         if scope in (_SCOPE_GLOBAL, _SCOPE_SHARED, _SCOPE_SHARED_DYN, _SCOPE_LOCAL):
             raise ValueError(f"{scope} does not support allocation placement")
-        if data is not None or elem_offset is not None or byte_offset is not None or offset_factor:
+        if data is not None:
             raise ValueError(
                 "Allocation placement cannot be combined with pointer or offset metadata"
             )
@@ -287,13 +277,9 @@ def _alloc_tensor(
         shape,
         dtype,
         scope,
-        strides,
-        elem_offset,
         align,
-        offset_factor,
         layout,
         data=data,
-        byte_offset=byte_offset,
     )
     return _bind_tensor(
         alloc_tensor(allocated_addr, ty_args=[tensor_type], annotations=annotations)
@@ -348,7 +334,14 @@ def decl_tensor(
     ty=None,
 ) -> ir.Call:
     """Declare a pointer-backed tensor with one explicit ``Tensor`` type argument."""
-    return ir.Call("tirx.decl_tensor", [data], attrs=attrs, ty_args=ty_args, loc=loc, ty=ty)
+    return ir.Call(
+        "tirx.decl_tensor",
+        [data],
+        attrs=attrs,
+        ty_args=ty_args,
+        loc=loc,
+        ty=ty,
+    )
 
 
 alloc_shared = functools.partial(_alloc_tensor, scope="shared")
@@ -379,7 +372,7 @@ def alloc_scalar(
 
 
 @_register_mutable_decl("tirx.decl_scalar")
-def decl_scalar(dtype, data, scope, elem_offset=None, byte_offset=None) -> _ir.TensorLoad:
+def decl_scalar(dtype, data, scope, layout=None) -> _ir.TensorLoad:
     """Declare a zero-dimensional tensor (scalar) from a pointer."""
     buf = _bind_tensor(
         decl_tensor(
@@ -389,9 +382,8 @@ def decl_scalar(dtype, data, scope, elem_offset=None, byte_offset=None) -> _ir.T
                     (1,),
                     dtype,
                     scope=scope,
-                    elem_offset=_get_elem_offset(elem_offset, byte_offset, dtype),
                     align=-1,
-                    layout=None,
+                    layout=layout,
                 )
             ],
         )

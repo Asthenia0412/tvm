@@ -20,8 +20,8 @@ These classes emit TIR via @T.inline. Decorate with @T.meta_class so that
 instances are automatically treated as meta values inside @T.function.
 """
 
+from tvm_tirx.ir import IntImm as _IntImm
 from tvm_tirx.script import tirx as T
-from tvm_tirx.tirx import IntImm as _IntImm
 
 
 def _tcgen05_commit_is_unicast(cta_mask):
@@ -314,7 +314,7 @@ class TCGen05Bar(MBarrier):
                 T.ptx[
                     f"tcgen05.commit.cta_group::{cta_group}"
                     ".mbarrier::arrive::one.shared::cluster.multicast::cluster.b64"
-                ](self.buf.ptr_to([stage]), T.Cast(cta_mask, "uint16"), pred=pred)
+                ](self.buf.ptr_to([stage]), T.Cast("uint16", cta_mask), pred=pred)
             )
 
 

@@ -432,7 +432,7 @@ class InplaceOpVerifier : public StmtExprVisitor {
                                                     const CallNode* tensor_call) {
     // reject inplace for volatile buffers
     if ((tensor_call->attrs.has_value() ? tensor_call->attrs.value().as<DictAttrsNode>() : nullptr)
-            ->dict.count(tvm::tirx::attr::kVolatile)) {
+            ->dict.count(tvm::tirx::attr::kVolatile.name)) {
       result_ = false;
       return std::nullopt;
     }
@@ -822,9 +822,7 @@ class StoragePlanRewriter : public StmtExprMutator {
     }
     // Flat packing and lifetime reuse cannot reconstruct arbitrary physical views.
     // Preserve their original allocation before either planning step can combine it.
-    if (type->shape.size() != 1 || type->layout.has_value() || !IsConstInt(type->elem_offset, 0) ||
-        (!type->strides.empty() &&
-         (type->strides.size() != 1 || !IsConstInt(type->strides[0], 1)))) {
+    if (type->shape.size() != 1 || type->layout.has_value()) {
       return true;
     }
     if (!call->args.empty()) return true;
@@ -832,7 +830,7 @@ class StoragePlanRewriter : public StmtExprMutator {
     // Rebuilt allocations only preserve volatile metadata.  Other owners may attach
     // constraints that cannot be transferred to merged or resized storage.
     for (const auto& [key, value] : annotations) {
-      if (key != tvm::tirx::attr::kVolatile) return true;
+      if (key != tvm::tirx::attr::kVolatile.name) return true;
     }
     return false;
   }
@@ -842,8 +840,7 @@ class StoragePlanRewriter : public StmtExprMutator {
   static bool HasCompatibleAlignment(const StorageEntry* entry, const CallNode* call) {
     auto first = entry->allocs[0]->value.as<CallNode>()->ty_args[0].as_or_throw<TensorType>();
     auto type = call->ty_args[0].as_or_throw<TensorType>();
-    return first->data_alignment == type->data_alignment &&
-           first->offset_factor == type->offset_factor;
+    return first->data_alignment == type->data_alignment;
   }
 
   // The owning lowering handles single-allocation layouts that cannot be packed
@@ -856,10 +853,7 @@ class StoragePlanRewriter : public StmtExprMutator {
     for (const auto* allocation : entry->allocs) {
       const auto* call = allocation->value.as<CallNode>();
       auto type = call->ty_args[0].as_or_throw<TensorType>();
-      if (type->shape.size() != 1 || type->dtype.IsScalableVector() || type->layout.has_value() ||
-          !IsConstInt(type->elem_offset, 0) ||
-          (!type->strides.empty() &&
-           (type->strides.size() != 1 || !IsConstInt(type->strides[0], 1))))
+      if (type->shape.size() != 1 || type->dtype.IsScalableVector() || type->layout.has_value())
         return false;
     }
     return true;
@@ -883,7 +877,6 @@ class StoragePlanRewriter : public StmtExprMutator {
         auto type = allocation->value.as<CallNode>()->ty_args[0].as_or_throw<TensorType>();
         uint64_t element_bits = type->dtype.bits() * type->dtype.lanes();
         if (!include_alignment(element_bits) ||
-            !include_alignment(element_bits * std::max(type->offset_factor, 1)) ||
             !include_alignment(static_cast<uint64_t>(std::max(type->data_alignment, 1)) * 8)) {
           return std::nullopt;
         }
@@ -976,7 +969,7 @@ class StoragePlanRewriter : public StmtExprMutator {
           TensorVar buf = RemapTensor(e->allocs[0]->var.as_or_throw<TensorVar>(), e->alloc_var);
           ffi::Map<ffi::String, ffi::Any> annotations;
           if (e->is_volatile) {
-            annotations.Set(tvm::tirx::attr::kVolatile, true);
+            annotations.Set(tvm::tirx::attr::kVolatile.name, true);
           }
           e->alloc_nest.push_back(Bind(buf, Call(buf.ty(), tirx::alloc_tensor_op(), {},
                                                  DictAttrs(annotations), {buf.ty()})));
@@ -1022,7 +1015,7 @@ class StoragePlanRewriter : public StmtExprMutator {
           TensorVar buf = RemapTensor(e->allocs[0]->var.as_or_throw<TensorVar>(), e->alloc_var);
           ffi::Map<ffi::String, ffi::Any> annotations;
           if (e->is_volatile) {
-            annotations.Set(tvm::tirx::attr::kVolatile, true);
+            annotations.Set(tvm::tirx::attr::kVolatile.name, true);
           }
           e->alloc_nest.push_back(Bind(buf, Call(buf.ty(), tirx::alloc_tensor_op(), {},
                                                  DictAttrs(annotations), {buf.ty()})));
@@ -1071,13 +1064,12 @@ class StoragePlanRewriter : public StmtExprMutator {
           combo_size = analyzer_->Simplify(combo_size);
           TensorVar buf(
               e->alloc_var->name,
-              TensorType({combo_size}, alloc_type, e->scope, {}, std::nullopt,
-                         first_call->ty_args[0].as_or_throw<TensorType>()->data_alignment,
-                         first_call->ty_args[0].as_or_throw<TensorType>()->offset_factor));
+              TensorType({combo_size}, alloc_type, e->scope,
+                         first_call->ty_args[0].as_or_throw<TensorType>()->data_alignment));
           e->alloc_var = buf;
           ffi::Map<ffi::String, ffi::Any> annotations;
           if (e->is_volatile) {
-            annotations.Set(tvm::tirx::attr::kVolatile, true);
+            annotations.Set(tvm::tirx::attr::kVolatile.name, true);
           }
           e->alloc_nest.push_back(Bind(buf, Call(buf.ty(), tirx::alloc_tensor_op(), {},
                                                  DictAttrs(annotations), {buf.ty()})));
@@ -1116,8 +1108,8 @@ class StoragePlanRewriter : public StmtExprMutator {
       shape_type = PrimType::Int(64);
     }
     PrimExpr alloc_size = MakeConst(shape_type, alloc_elements);
-    TensorVar buf(e->alloc_var->name, TensorType({alloc_size}, e->elem_type, e->scope, {},
-                                                 std::nullopt, static_cast<int>(align / 8), 0));
+    TensorVar buf(e->alloc_var->name,
+                  TensorType({alloc_size}, e->elem_type, e->scope, static_cast<int>(align / 8)));
     e->alloc_var = buf;
     for (StorageEntry* child : e->merged_children) {
       child->alloc_var = e->alloc_var;
@@ -1128,7 +1120,7 @@ class StoragePlanRewriter : public StmtExprMutator {
     }
     ffi::Map<ffi::String, ffi::Any> annotations;
     if (any_volatile) {
-      annotations.Set(tvm::tirx::attr::kVolatile, true);
+      annotations.Set(tvm::tirx::attr::kVolatile.name, true);
     }
     e->alloc_nest.push_back(
         Bind(buf, Call(buf.ty(), tirx::alloc_tensor_op(), {}, DictAttrs(annotations), {buf.ty()})));
@@ -1253,7 +1245,7 @@ class StoragePlanRewriter : public StmtExprMutator {
           }
           dst_entry->allocs.emplace_back(alloc);
           DictAttrs annotations = call->attrs.value().as_or_throw<DictAttrs>();
-          if (annotations->dict.count(tvm::tirx::attr::kVolatile)) {
+          if (annotations->dict.count(tvm::tirx::attr::kVolatile.name)) {
             dst_entry->is_volatile = true;
           }
           alloc_map_[var] = dst_entry;
@@ -2291,7 +2283,7 @@ Pass StorageRewrite() {
       enable_reuse = false;
     }
 
-    ffi::Optional<Target> target = f->GetAttr<Target>(tvm::attr::kTarget);
+    ffi::Optional<Target> target = f->GetAttr(tvm::attr::kTarget);
     if (target.has_value() &&
         (target.value()->kind->name == "vulkan" || target.value()->kind->name == "webgpu")) {
       // Require exactly same-dtype matching in smem reuse for Vulkan and WebGPU

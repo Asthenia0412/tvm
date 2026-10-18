@@ -39,6 +39,9 @@ from .type import (
 )
 from .expr import (
     Call,
+    CallEffectKind,
+    IntImm,
+    FloatImm,
     Constant,
     GenericConst,
     DataTypeImm,
@@ -83,8 +86,6 @@ from .stmt import (
     stmt_seq,
     stmt_list,
 )
-
-from tvm_ffi import Array, Map
 
 # Load passes after the common IR classes used by transformations are registered.
 from . import transform

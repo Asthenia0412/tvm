@@ -35,9 +35,11 @@ opaque TensorMap and packed/interleaved representations.
 from itertools import product
 from math import prod
 
+import tvm_ffi
+
 from tvm_tirx.backend.cuda.ptx import PTXNamespace
 from tvm_tirx.ir import Range, TensorRegion, Tuple, Var
-from tvm_tirx.runtime import DataType, MemoryScope
+from tvm_tirx.runtime import MemoryScope
 from tvm_tirx.script import tirx as T
 
 from .common import Context, scalar
@@ -62,7 +64,7 @@ def _descriptor_fields(fields, rank, box, default_dtype):
     force = 11 if dtype == "tf32" else -1
     if force == 11:
         dtype = "float32"
-    bits = DataType(dtype).bits
+    bits = tvm_ffi.dtype(dtype).bits
     element_strides = tuple(
         int(scalar(x)) for x in sequence(fields.pop("element_strides", (1,) * rank))
     )
@@ -98,7 +100,7 @@ def _tensor_map(ctx, region, rank, box, encoding):
         raise ValueError("TMA descriptor requires a global tensor region")
     tensor = region.source
     ty = tensor.ty
-    bits = DataType(ty.dtype.dtype).bits
+    bits = tvm_ffi.dtype(ty.dtype.dtype).bits
     packed = encoding[0] == "float4_e2m1fn"
     interleave = encoding[4]
     channels = (16 * interleave * 8 // bits) if interleave else 1
@@ -108,7 +110,7 @@ def _tensor_map(ctx, region, rank, box, encoding):
     view_dims = tuple(r.extent for r in region.region)
     dims = view_dims[:rank]
     for size in dims:
-        wide = T.cast(size, "int64")
+        wide = T.cast(size, ty="int64")
         _encode_requirement(
             ctx, T.And(wide > 0, wide <= 2**32), "TMA dimensions must be in 1..2^32"
         )
@@ -123,11 +125,7 @@ def _tensor_map(ctx, region, rank, box, encoding):
     # checked at the same coordinates, without folding or permuting its axes.
     layout = ty.layout
     if layout is None:
-        strides = (
-            list(ty.strides)
-            if ty.strides
-            else [prod(ty.shape[i + 1 :]) for i in range(tensor_rank)]
-        )
+        strides = [prod(ty.shape[i + 1 :]) for i in range(tensor_rank)]
         base = {"m": sum(i * s for i, s in zip(starts, strides))}
     else:
         base = layout.apply(*starts, shape=ty.shape)
@@ -162,11 +160,11 @@ def _tensor_map(ctx, region, rank, box, encoding):
         ctx.require(strides[-1] == channels, "TMA W stride must equal one interleave slice")
     alignment = 32 if packed or interleave == 2 else 16
     ctx.require(
-        (base["m"] + ty.elem_offset) * bits % (8 * alignment) == 0,
+        base["m"] * bits % (8 * alignment) == 0,
         f"TMA global origin requires {alignment}-byte alignment",
     )
     for stride in strides[:-1]:
-        byte_stride = T.cast(stride, "int64") * bits // 8
+        byte_stride = T.cast(stride, ty="int64") * bits // 8
         _encode_requirement(
             ctx,
             byte_stride % alignment == 0,
@@ -258,12 +256,12 @@ def lower(opcode, entry, modifiers, args, params, sctx):
     )
     encoding = _descriptor_fields(params, rank, box, default_dtype)
     dtype, _, element_strides, swizzle, interleave, _, _ = encoding
-    bits = DataType(dtype).bits
+    bits = tvm_ffi.dtype(dtype).bits
     packed = dtype == "float4_e2m1fn"
     if packed and not load:
         raise ValueError("TMA 16U4_ALIGN16B supports global-to-shared loads only")
     if isinstance(global_, TensorRegion):
-        if bits != DataType(global_.source.ty.dtype.dtype).bits:
+        if bits != tvm_ffi.dtype(global_.source.ty.dtype.dtype).bits:
             raise ValueError("TMA descriptor format must match the global storage element width")
         tensor_map = _tensor_map(ctx, global_, rank, box, encoding)
         tmap = T.address_of(tensor_map)
@@ -300,8 +298,8 @@ def lower(opcode, entry, modifiers, args, params, sctx):
         ctx.require(base_bits % 1024 == 0, "TMA atom origin must be 128-byte aligned")
         pointer = (
             T.cuda.cvta_generic_to_shared(pointer)
-            - T.cast(physical_bits // 8, "uint32")
-            + T.cast(base_bits // 8, "uint32")
+            - T.cast(physical_bits // 8, ty="uint32")
+            + T.cast(base_bits // 8, ty="uint32")
         )
     else:
         smem.aligned(origin, 128)
@@ -341,20 +339,20 @@ def lower(opcode, entry, modifiers, args, params, sctx):
         if len(rows) != 4:
             raise ValueError("gather4 requires four explicit row coordinates")
         native_coords = [coords[-1], *rows]
-    native_coords = [T.cast(c, "int32") for c in native_coords]
+    native_coords = [T.cast(c, ty="int32") for c in native_coords]
     if load:
         native = [pointer, tmap, *native_coords, params.pop("mbar")]
         if modifiers.get("multicast"):
             native.append(
                 T.cast(
                     params.pop("cta_mask"),
-                    "uint32" if entry.name.endswith("multicast32") else "uint16",
+                    ty="uint32" if entry.name.endswith("multicast32") else "uint16",
                 )
             )
     else:
         native = [tmap, *native_coords, pointer]
     if modifiers.get("cache"):
-        native.append(T.cast(params.pop("cache_policy"), "uint64"))
+        native.append(T.cast(params.pop("cache_policy"), ty="uint64"))
     pred = params.pop("pred", None)
     if params:
         raise ValueError(f"{opcode}: unknown fields {tuple(params)}")

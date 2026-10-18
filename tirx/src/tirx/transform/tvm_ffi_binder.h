@@ -25,8 +25,8 @@
  * packed function arguments. The caller (make_packed_api.cc) creates
  * an TVMFFIABIBuilder and calls DecodeParam(i) for each parameter.
  */
-#ifndef TVM_TIR_TRANSFORM_TVM_FFI_BINDER_H_
-#define TVM_TIR_TRANSFORM_TVM_FFI_BINDER_H_
+#ifndef TVM_TIRX_TRANSFORM_TVM_FFI_BINDER_H_
+#define TVM_TIRX_TRANSFORM_TVM_FFI_BINDER_H_
 
 #include <tvm/ffi/reflection/access_path.h>
 #include <tvm/ir/prim/expr.h>
@@ -127,7 +127,8 @@ class TVMFFIABIBuilder {
    * This is the primary public method after construction. It:
    * 1. Calls DecodeParam(i) for each parameter to type-check, load values,
    *    and bind scalar params
-   * 2. Binds DLTensor tensors to handles (shape, strides, dtype, device checks)
+   * 2. Binds DLTensor tensors to handles, preferring bare-variable dimensions
+   * 3. Infers unresolved linear shapes, then adds remaining shape checks
    *
    * Statements are routed to init_nest_, asserts_, or decl_tensors_.
    */
@@ -227,6 +228,13 @@ class TVMFFIABIBuilder {
   // ── Private binding submethods (all take ffi::reflection::AccessPath) ───────────
 
   /*!
+   * \brief Infer a variable from a linear shape when no bare dimension defines it.
+   * \return Whether this shape defined a variable and needs no further equality check.
+   */
+  bool TryBindLinearIntExpr(const PrimExpr& arg, const PrimExpr& value,
+                            const ffi::reflection::AccessPath& path);
+
+  /*!
    * \brief Internal scalar bind with ffi::reflection::AccessPath tracking and rich error messages.
    *
    * Binds \p arg to \p value. If arg is a Var not yet in var_defs_, creates a
@@ -249,30 +257,6 @@ class TVMFFIABIBuilder {
   /*! \brief Bind an exact pointer-typed variable to a pointer-valued expression. */
   bool BindPointer(const Var& arg, const Expr& value, const ffi::reflection::AccessPath& path,
                    bool with_lets);
-
-  /*!
-   * \brief Array bind: binds element-wise with ffi::reflection::AccessPath[k] for each element.
-   *
-   * \param arg The expected array of expressions.
-   * \param value The actual array of expressions to bind against.
-   * \param base_path Base ffi::reflection::AccessPath; each element appends ArrayItem(k).
-   */
-  void BindArray(const ffi::Array<PrimExpr>& arg, const ffi::Array<PrimExpr>& value,
-                 const ffi::reflection::AccessPath& base_path);
-
-  /*!
-   * \brief TensorVar-to-tensor bind with ffi::reflection::AccessPath.
-   *
-   * Binds data, elem_offset, shape, and strides of \p arg against \p value,
-   * emitting assertions for any mismatches.
-   *
-   * \param arg The expected tensor definition.
-   * \param value The actual tensor to bind against.
-   * \param base_path Base ffi::reflection::AccessPath for the tensor parameter.
-   * \param fuzzy_match If true, allow value to have more dimensions than arg.
-   */
-  void BindTensor(const TensorVar& arg, const TensorVar& value,
-                  ffi::reflection::AccessPath base_path, bool fuzzy_match);
 
   /*!
    * \brief DLTensor bind: ndim/dtype/shape/strides/data/device assertions.
@@ -383,8 +367,24 @@ class TVMFFIABIBuilder {
     PrimExpr expected_expr;
   };
 
+  /*! \brief An integer expression deferred until bare dimensions are bound. */
+  struct PendingIntExpr {
+    /*! \brief The expected dimension expression from the tensor signature. */
+    PrimExpr arg;
+    /*! \brief The dimension value loaded from the runtime argument. */
+    PrimExpr value;
+    /*! \brief The argument access path used in diagnostics. */
+    ffi::reflection::AccessPath path;
+    /*! \brief Whether equality still needs checking after linear inference. */
+    bool needs_check{true};
+  };
+
+  /*! \brief Non-variable shapes, processed after all bare dimensions have been bound. */
+  std::vector<PendingIntExpr> pending_int_exprs_;
   /*! \brief The definition map: VarNode* -> VarDefInfo (value + first_def_path). */
   std::unordered_map<const VarNode*, VarDefInfo> var_defs_;
+  /*! \brief Decoded shape expressions for diagnostics of inferred variables. */
+  std::unordered_map<const VarNode*, std::string> shape_var_exprs_;
   /*! \brief Variable definitions: Binds, shape/strides DeclTensors. */
   std::vector<Stmt> init_nest_;
   /*! \brief Validation checks: all AssertStmts. */
@@ -421,4 +421,4 @@ class TVMFFIABIBuilder {
 
 }  // namespace tirx
 }  // namespace tvm
-#endif  // TVM_TIR_TRANSFORM_TVM_FFI_BINDER_H_
+#endif  // TVM_TIRX_TRANSFORM_TVM_FFI_BINDER_H_

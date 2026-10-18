@@ -701,7 +701,7 @@ TensorLoad::TensorLoad(Expr source, ffi::Array<PrimExpr> indices, Location loc)
   TVM_FFI_CHECK(source.defined() && source->ty.defined(), TypeError)
       << "TensorLoad requires a source with a defined type";
   namespace refl = ffi::reflection;
-  static const refl::TypeAttrColumn infer_column(type_attr::kTensorLoadInferType);
+  static const refl::TypeAttrColumn infer_column(type_attr::kTensorLoadInferType.name);
   auto infer = infer_column[source->ty->type_index()];
   TVM_FFI_CHECK(infer != nullptr, TypeError)
       << "Type " << source->ty->GetTypeKey() << " does not support TensorLoad";
@@ -729,7 +729,7 @@ TensorLoad TensorLoad::Unchecked(PrimType ty, Expr source, ffi::Array<PrimExpr> 
 
 TVM_FFI_STATIC_INIT_BLOCK() {
   namespace refl = tvm::ffi::reflection;
-  refl::EnsureTypeAttrColumn(type_attr::kTensorLoadInferType);
+  refl::EnsureTypeAttrColumn(type_attr::kTensorLoadInferType.name);
   refl::GlobalDef().def("ir.TensorLoad",
                         [](Expr source, ffi::Array<PrimExpr> indices, Location loc) {
                           return TensorLoad(source, indices, loc);
@@ -784,19 +784,22 @@ Expr LambdaExprNode::Apply(const ffi::Array<Expr>& arguments) const {
       .cast<Expr>();
 }
 
-LambdaExpr::LambdaExpr(ffi::Array<Var> vars, Expr body) : StagingExpr(ffi::UnsafeInit{}) {
+LambdaExpr::LambdaExpr(ffi::Array<Var> vars, Expr body, Location loc)
+    : StagingExpr(ffi::UnsafeInit{}) {
   auto n = ffi::make_object<LambdaExprNode>(std::move(body));
   ffi::Array<Type> types;
   for (const Var& var : vars) types.push_back(var->ty);
   n->ty = FuncType(types, n->body->ty);
   n->vars = std::move(vars);
+  n->loc = std::move(loc);
   data_ = std::move(n);
 }
 
 TVM_FFI_STATIC_INIT_BLOCK() {
   namespace refl = tvm::ffi::reflection;
-  refl::GlobalDef().def("ir.LambdaExpr",
-                        [](ffi::Array<Var> vars, Expr body) { return LambdaExpr(vars, body); });
+  refl::GlobalDef().def("ir.LambdaExpr", [](ffi::Array<Var> vars, Expr body, Location loc) {
+    return LambdaExpr(vars, body, loc);
+  });
 }
 
 TVM_FFI_STATIC_INIT_BLOCK() {
@@ -879,16 +882,8 @@ PrimExpr::PrimExpr(int32_t value) : PrimExpr(IntImm::Int32(value)) {}
 
 PrimExpr::PrimExpr(float value) : PrimExpr(FloatImm(PrimType::Float(32), value)) {}
 
-TVM_FFI_STATIC_INIT_BLOCK() {
-  namespace refl = tvm::ffi::reflection;
-  refl::GlobalDef()
-      .def("relax.Tuple", [](ffi::Array<Expr> fields, Location loc) { return Tuple(fields, loc); })
-      .def("relax.TupleGetItem",
-           [](Expr tuple, int index, Location loc) { return TupleGetItem(tuple, index, loc); });
-}
-
 // Constants
-GenericConst::GenericConst(ffi::Any value, Type ty, Location loc) : Constant(ffi::UnsafeInit{}) {
+GenericConst::GenericConst(Type ty, ffi::Any value, Location loc) : Constant(ffi::UnsafeInit{}) {
   TVM_FFI_CHECK(!ty.as<MissingType>().has_value(), TypeError)
       << "GenericConst requires an expression type";
   TVM_FFI_CHECK(!value.as<ffi::BigInt>() && !value.as<bool>() && !value.as<double>() &&
@@ -947,8 +942,8 @@ TVM_FFI_STATIC_INIT_BLOCK() {
             ffi::FStructuralMutate::FromNative<&DataTypeImmMaybeInplaceMutate>());
   refl::GlobalDef()
       .def("ir.GenericConst",
-           [](ffi::Any value, Type ty, Location loc) {
-             return GenericConst(std::move(value), std::move(ty), std::move(loc));
+           [](Type ty, ffi::Any value, Location loc) {
+             return GenericConst(std::move(ty), std::move(value), std::move(loc));
            })
       .def("ir.DataTypeImm",
            [](DLDataType value, Location loc) { return DataTypeImm(value, std::move(loc)); })
@@ -1173,7 +1168,7 @@ Range Range::FromMinExtent(PrimExpr min, PrimExpr extent, Location loc) {
 
 TVM_FFI_STATIC_INIT_BLOCK() {
   namespace refl = tvm::ffi::reflection;
-  refl::GlobalDef().def("ir.Range_from_min_extent", Range::FromMinExtent);
+  refl::GlobalDef().def("ir.RangeFromMinExtent", Range::FromMinExtent);
 }
 
 // Var
@@ -1241,7 +1236,8 @@ TVM_FFI_STATIC_INIT_BLOCK() {
       .attr(ffi::type_attr::kStructuralMaybeInplaceMutate,
             ffi::FStructuralMutate::FromNative<&GlobalVarMaybeInplaceMutate>());
 
-  refl::GlobalDef().def("ir.GlobalVar", [](ffi::String name) { return GlobalVar(name); });
+  refl::GlobalDef().def("ir.GlobalVar",
+                        [](ffi::String name, Location loc) { return GlobalVar(name, loc); });
 }
 
 // Call construction intentionally does not validate: passes and raw script
@@ -1296,18 +1292,10 @@ TVM_FFI_STATIC_INIT_BLOCK() {
                            ffi::Optional<Attrs> attrs, ffi::Array<Type> ty_args,
                            Location loc) { return Call(ret_ty, op, args, attrs, ty_args, loc); });
   refl::GlobalDef().def("ir.CallValidate", [](const Call& call) { call.Validate(); });
-  refl::GlobalDef().def("ir.reinfer_type",
+  refl::GlobalDef().def("ir.CallReinferType",
                         [](const Call& call) { return Call::ReinferType(call.get()); });
 }
 
-TVM_FFI_STATIC_INIT_BLOCK() {
-  namespace refl = tvm::ffi::reflection;
-  refl::GlobalDef().def("ir.DebugPrint", [](ffi::ObjectRef ref) {
-    std::stringstream ss;
-    ss << ref;
-    return ss.str();
-  });
-  // Note: kRepr for GlobalVarNode is registered in script/printer/script_printer.cc.
-}
+// Note: kRepr for GlobalVarNode is registered in script/printer/script_printer.cc.
 
 }  // namespace tvm

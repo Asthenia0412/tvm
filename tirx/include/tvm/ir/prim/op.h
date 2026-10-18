@@ -459,11 +459,11 @@ TVM_TIRX_DLL PrimExpr if_then_else(PrimExpr cond, PrimExpr true_value, PrimExpr 
  * \return The marked expression.
  */
 TVM_TIRX_DLL PrimExpr likely(PrimExpr cond, Location loc = UnknownLoc());
+namespace prim {
 /*! \brief Round up to the nearest integral value, preserving the input type. */
 TVM_TIRX_DLL PrimExpr ceil(PrimExpr x, Location loc = UnknownLoc());
 /*! \brief Construct a base-two logarithm with the input's primitive type. */
 TVM_TIRX_DLL PrimExpr log2(PrimExpr x, Location loc = UnknownLoc());
-namespace prim {
 /*! \brief Count leading zero bits, preserving the input primitive type. */
 TVM_TIRX_DLL PrimExpr clz(PrimExpr x, Location loc = UnknownLoc());
 /*!
@@ -493,7 +493,6 @@ TVM_TIRX_DLL PrimExpr max_value(PrimType dtype, Location loc = UnknownLoc());
  * uses MakeConst for scalar and vector constants.
  */
 TVM_TIRX_DLL PrimExpr cast(PrimExpr value, PrimType t, Location loc = UnknownLoc());
-TVM_TIRX_DLL PrimExpr cast(PrimExpr value, DLDataType t, Location loc = UnknownLoc());
 /*! \brief Construct integer absolute value; floating absolute value belongs to TIRX. */
 TVM_TIRX_DLL PrimExpr IntegerAbs(PrimExpr x, Location loc = UnknownLoc());
 /*!
@@ -986,9 +985,9 @@ inline void CheckMathUnaryOpInputDType(const char* op_name, const PrimType& dtyp
           x_ty.IsScalableVector()                                                             \
               ? PrimType::ScalableVector(DLDataTypeCode::kDLFloat, 32, x_ty.VScaleFactor())   \
               : PrimType::Float(32, x_ty.lanes());                                            \
-      PrimExpr x_fp32 = prim::Cast(x, f32_ty, loc);                                           \
+      PrimExpr x_fp32 = prim::Cast(f32_ty, x, loc);                                           \
       PrimExpr result_fp32 = Call(f32_ty, op, {x_fp32}, {}, {}, loc).as_or_throw<PrimExpr>(); \
-      return prim::Cast(result_fp32, bf16_ty, loc);                                           \
+      return prim::Cast(bf16_ty, result_fp32, loc);                                           \
     } else {                                                                                  \
       return Call(x_ty, op, {x}, {}, {}, loc).as_or_throw<PrimExpr>();                        \
     }                                                                                         \

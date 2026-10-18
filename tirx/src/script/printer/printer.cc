@@ -133,7 +133,7 @@ void ApplyDisplayNames(const Doc& root, const PrinterConfig& config,
       if (auto original = origins.Get(definition)) {
         auto attrs = ReflectedField(ReflectedField(original.value(), "attrs"), "dict");
         if (auto dict = attrs.as<ffi::Map<ffi::String, ffi::Any>>()) {
-          if (auto symbol = dict->Get(tvm::attr::kGlobalSymbol)) {
+          if (auto symbol = dict->Get(tvm::attr::kGlobalSymbol.name)) {
             TVM_FFI_CHECK(symbol.value().cast<ffi::String>() == name.value(), TypeError)
                 << "printer function global_symbol must match its definition name";
           }
@@ -364,7 +364,7 @@ ffi::String RenderScript(const ffi::ObjectRef& obj, const PrinterConfig& config)
       for (size_t suffix = 1; used.count(loader); ++suffix)
         loader = "tvm_tirx_" + std::to_string(suffix);
       ffi::String json = ffi::json::Stringify(
-          ffi::ToJSONGraph(metadata, ffi::json::Object{{"tvm_version", TVM_VERSION}}), 2);
+          ffi::ToJSONGraph(metadata, ffi::json::Object{{"tvm_tirx_version", TVM_TIRX_VERSION}}), 2);
       block.value()->stmts.insert(block.value()->stmts.begin(),
                                   AssignDoc(metadata_id.value(),
                                             IdDoc(loader)
@@ -459,7 +459,8 @@ std::string RenderFallbackWithInvisiblePathInfo(const ffi::String& script,
 
 std::string Script(const ffi::ObjectRef& node, const ffi::Optional<PrinterConfig>& cfg) {
   PrinterConfig config = cfg.value_or(PrinterConfig());
-  static ffi::reflection::TypeAttrColumn translate(tvm::script::printer::type_attr::kDocTranslate);
+  static ffi::reflection::TypeAttrColumn translate(
+      tvm::script::printer::type_attr::kDocTranslate.name);
   // Builtin runtime roots keep their native repr; hooks still translate them within IR.
   if (!node.defined() || node->type_index() < ffi::TypeIndex::kTVMFFIDynObjectBegin ||
       (translate[node->type_index()].type_index() == ffi::TypeIndex::kTVMFFINone &&

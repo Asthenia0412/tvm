@@ -28,6 +28,7 @@ import builtins as _python
 from collections.abc import Callable, Sequence
 from typing import Any, NoReturn
 
+import tvm_ffi
 import tvm_ffi as _ffi
 
 from tvm import relax as _relax
@@ -36,7 +37,6 @@ from tvm.relax.type import Type
 from tvm.relax.utils import gen_call_tir_inputs
 from tvm_tirx import ir as _ir
 from tvm_tirx.ir.location import UnknownLoc
-from tvm_tirx.runtime import Object as tvm_Object
 from tvm_tirx.script.ir_builder import base as _base
 from tvm_tirx.script.ir_builder.base import IRBuilder as _IRBuilder
 from tvm_tirx.script.ir_builder.parser_protocol import decl_function
@@ -89,12 +89,12 @@ def function_(
     Local function bodies require their previously declared reference.
     """
     if decl:
-        return _base.at_(loc, _ffi_api.DeclFunction(pure, private, local))
+        return _base.at_(loc, _ffi_api.Function(pure, private, True, local))
     if local:
         if reference is None:
             raise ValueError("A local function requires its declared reference")
         return _base.at_(loc, _ffi_api.LocalFunction(pure, reference))
-    return _base.at_(loc, _ffi_api.Function(pure, private))
+    return _base.at_(loc, _ffi_api.Function(pure, private, False, False))
 
 
 def arg_(name: str, ty: Any, *, loc: _Loc = None) -> _ir.Var:
@@ -129,7 +129,7 @@ def func_name_(name: str) -> None:
     return _ffi_api.FuncName(name)
 
 
-def func_attr(attrs: dict[str, tvm_Object]) -> None:
+def func_attr(attrs: dict[str, tvm_ffi.Object]) -> None:
     """Specify the attrs of the last function frame.
 
     Parameters
@@ -258,7 +258,7 @@ def bind_(
     if isinstance(name_loc, _base.LocationEntry):
         name_loc = name_loc.loc
     if frame_value:
-        if isinstance(value, _python.list | _python.tuple | _ir.Array):
+        if isinstance(value, _python.list | _python.tuple | tvm_ffi.Array):
             for index, item in enumerate(value):
                 bind_(
                     item,

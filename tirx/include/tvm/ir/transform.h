@@ -177,6 +177,7 @@ class PassContext : public ffi::ObjectRef {
           TVM_FFI_THROW(AttributeError)
               << "Expect config " << key << " to have type " << type_str << ", but instead get "
               << ffi::details::AnyUnsafe::GetMismatchTypeInfo<ValueType>(value);
+          TVM_FFI_UNREACHABLE();
         } else {
           return *opt_val;
         }
@@ -262,9 +263,9 @@ class PassInfo : public ffi::ObjectRef {
 };
 
 /*!
- * \brief PassObj is the base type of differnt types of optimization passes.
+ * \brief PassObj is the base type of different types of optimization passes.
  * It is designed as a pure class and implemented by different pass subclasses
- * at different granularity of Relax nodes.
+ * at different granularity of IR nodes.
  */
 class PassObj : public ffi::Object {
  public:
@@ -333,7 +334,7 @@ class Pass : public ffi::ObjectRef {
 };
 
 /*!
- * \brief The SequentialObj contains a set of passes that transform Relax
+ * \brief The SequentialObj contains a set of passes that transform
  * programs from one AST to another semantically equivalent one.
  *
  * One example of this level of pass is that the pass manager needs to correctly

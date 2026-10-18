@@ -35,6 +35,12 @@
 
 namespace tvm {
 
+namespace backend::attr {
+/*! \brief Optional backend configuration on a Target, distinct from serialized IR/runtime JSON. */
+inline constexpr ffi::reflection::AttrKey<ffi::Map<ffi::String, ffi::Any>> kBackendConfig{
+    "backend_config"};
+}  // namespace backend::attr
+
 class TargetInternal;
 class Target;
 
@@ -119,6 +125,21 @@ class TargetObj : public ffi::Object {
     return GetAttr<TObjectRef>(attr_key, ffi::Optional<TObjectRef>(default_value));
   }
 
+  /*! \brief Get an optional Target attribute using the value type declared by its key. */
+  template <typename T>
+  ffi::Optional<T> GetAttr(ffi::reflection::AttrKey<T> key,
+                           ffi::Optional<typename ffi::reflection::AttrKey<T>::ValueType>
+                               default_value = std::nullopt) const {
+    return GetAttr<T>(key.name, std::move(default_value));
+  }
+
+  /*! \brief Use a default value when the typed Target attribute is absent. */
+  template <typename T>
+  ffi::Optional<T> GetAttr(ffi::reflection::AttrKey<T> key,
+                           typename ffi::reflection::AttrKey<T>::ValueType default_value) const {
+    return GetAttr(key, ffi::Optional<T>(std::move(default_value)));
+  }
+
   static constexpr TVMFFISEqHashKind _type_s_eq_hash_kind = kTVMFFISEqHashKindTreeNode;
   TVM_FFI_DECLARE_OBJECT_INFO_FINAL("target.Target", TargetObj, ffi::Object);
 
@@ -172,16 +193,12 @@ class Target : public ffi::ObjectRef {
   Target WithoutHost() const;
 
  private:
-  Target(TargetKind kind, ffi::Optional<ffi::ObjectRef> host, ffi::String tag,
-         ffi::Array<ffi::String> keys, ffi::Map<ffi::String, ffi::Any> attrs);
-
   // enable with syntax.
   friend class TargetInternal;
   friend class With<Target>;
   /*!
    * \brief Push a new target context onto the thread local stack.
-   *  The Target on top of the stack is used to determine which
-   *  specialization to use when invoking a GenericFunc.
+   *  The Target on top of the stack is returned by Target::Current().
    */
   TVM_TIRX_DLL void EnterWithScope();
   /*!

@@ -658,7 +658,7 @@ def test_error_on_wrong_padding_type():
             "block",
             sch.get(sch.get_sblock("block")).writes[0].source.name,
             lambda i: [i // 4, i % 4],
-            pad_value=tirx.IntImm("int8", 0),
+            pad_value=tvm_tirx.ir.IntImm("int8", 0),
         )
 
 
@@ -705,7 +705,7 @@ def test_padded_transform_if_then_else(dtype):
                 vi = Ts.axis.remap("S", [i])
                 B[vi] = A[vi]
 
-    pad_value_imm = tirx.IntImm(dtype, 0)
+    pad_value_imm = tvm_tirx.ir.IntImm(dtype, 0)
 
     @Ts.function(private=True)
     def expected_func(A: T.Tensor(14, dtype)):
@@ -1041,7 +1041,7 @@ def test_pad_value_may_not_reference_other_tensor():
 
     sch = tvm.s_tir.Schedule(Before)
     A = sch.get(sch.get_sblock("block")).reads[0].source
-    other = tirx.decl_tensor(1, A.ty.dtype, name="other")
+    other = tirx.Var("other", tirx.TensorType(1, A.ty.dtype))
     with pytest.raises(tvm.s_tir.schedule.schedule.ScheduleError):
         sch.transform_layout(
             "block",

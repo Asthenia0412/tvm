@@ -116,11 +116,11 @@ class LoopUnroller : public StmtExprMutator {
     return unroll_policy_.WithNewScope([&]() {
       auto& policy = unroll_policy_.Current();
       policy = parent_policy;
-      if (auto value = op->annotations.Get(tvm::tirx::attr::kAutoUnrollMaxStep);
+      if (auto value = op->annotations.Get(tvm::tirx::attr::kAutoUnrollMaxStep.name);
           value.has_value() && value.value() != nullptr) {
         policy.auto_unroll_max_step = value.value().cast<IntImm>()->value.as<int>().value();
       }
-      if (auto value = op->annotations.Get(tvm::tirx::attr::kUnrollExplicit);
+      if (auto value = op->annotations.Get(tvm::tirx::attr::kUnrollExplicit.name);
           value.has_value() && value.value() != nullptr) {
         policy.unroll_explicit = static_cast<bool>(value.value().cast<IntImm>()->value);
       }
@@ -130,6 +130,7 @@ class LoopUnroller : public StmtExprMutator {
 
   UnchangedOr<Stmt> RewriteLoop(const ForNode* op, InplaceMode inplace_mode) {
     // Post order so we can collect more information
+    int loop_control_count = loop_control_count_;
     auto result = StmtExprMutator::Mutate_(op, inplace_mode);
     if (!result.IsUnchanged()) {
       op = ffi::AnyView(result).as<ForNode>();
@@ -137,8 +138,8 @@ class LoopUnroller : public StmtExprMutator {
         inplace_mode = InplaceMode::kDisallow;
       }
     }
-    if (op->annotations.count(tvm::tirx::attr::kAutoUnrollMaxStep) ||
-        op->annotations.count(tvm::tirx::attr::kUnrollExplicit)) {
+    if (op->annotations.count(tvm::tirx::attr::kAutoUnrollMaxStep.name) ||
+        op->annotations.count(tvm::tirx::attr::kUnrollExplicit.name)) {
       ForNode* node;
       if (inplace_mode == InplaceMode::kAllow) {
         node = const_cast<ForNode*>(op);
@@ -147,9 +148,23 @@ class LoopUnroller : public StmtExprMutator {
         node = copy.get();
         result = For(std::move(copy));
       }
-      node->annotations.erase(tvm::tirx::attr::kAutoUnrollMaxStep);
-      node->annotations.erase(tvm::tirx::attr::kUnrollExplicit);
+      node->annotations.erase(tvm::tirx::attr::kAutoUnrollMaxStep.name);
+      node->annotations.erase(tvm::tirx::attr::kUnrollExplicit.name);
       op = node;
+    }
+    // Keep the loop enclosing break/continue intact, including extent-one loops.
+    if (loop_control_count_ != loop_control_count) {
+      ++normal_loop_depth_;
+      if (op->kind == ForKind::kUnrolled) {
+        if (inplace_mode == InplaceMode::kAllow) {
+          const_cast<ForNode*>(op)->kind = ForKind::kDefault;
+          return result;
+        }
+        auto node = ffi::make_object<ForNode>(*op);
+        node->kind = ForKind::kDefault;
+        return For(std::move(node));
+      }
+      return result;
     }
     int value = GetExtent(op);
     // condition for auto unroll
@@ -229,6 +244,16 @@ class LoopUnroller : public StmtExprMutator {
       }
     }
     return StmtExprMutator::Mutate_(op, inplace_mode);
+  }
+
+  UnchangedOr<Stmt> Mutate_(const BreakNode* op, InplaceMode inplace_mode) final {
+    ++loop_control_count_;
+    return ffi::Unchanged();
+  }
+
+  UnchangedOr<Stmt> Mutate_(const ContinueNode* op, InplaceMode inplace_mode) final {
+    ++loop_control_count_;
+    return ffi::Unchanged();
   }
 
   UnchangedOr<Stmt> Mutate_(const EvaluateNode* op, InplaceMode inplace_mode) final {
@@ -311,6 +336,8 @@ class LoopUnroller : public StmtExprMutator {
   int normal_loop_depth_{0};
   // number of unrolled cases in current scope.
   int unroll_depth_{0};
+  // Number of break/continue statements visited, including nested loops.
+  int loop_control_count_{0};
   // Number of total steps unrolled
   int step_count_{0};
   // set of indices touched during visit local memory

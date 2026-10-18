@@ -29,15 +29,14 @@ For example, you can use addexp.a to get the left operand of an Add node.
 """
 
 from tvm_tirx import ir
-from tvm_tirx.ir import Expr
+from tvm_tirx.ir import Expr as Expr
 from tvm_tirx.ir import const as const
-from tvm_tirx.ir._overload_prim_expr import (  # noqa: F401
+from tvm_tirx.ir._prim_expr_overload import (  # noqa: F401
     EqualOp,
     ExprOp,
     NotEqualOp,
     div_ambiguity_error,
 )
-from tvm_tirx.ir.location import UNKNOWN_LOC, Location
 from tvm_tirx.ir.prim import convert as convert
 
 # Retain historical imports as aliases of the canonical shared definitions.
@@ -55,14 +54,11 @@ from tvm_tirx.ir.prim.expr import (  # noqa: F401
     BitwiseNot,
     BitwiseOr,
     BitwiseXor,
-    Broadcast,
     Cast,
     CmpExpr,
     Div,
-    FloatImm,
     FloorDiv,
     FloorMod,
-    IntImm,
     Let,
     LogicalExpr,
     LShift,
@@ -72,64 +68,9 @@ from tvm_tirx.ir.prim.expr import (  # noqa: F401
     Mul,
     Not,
     Or,
-    Ramp,
     RShift,
     Select,
-    Shuffle,
     Sub,
 )
 
-
-class IntImmEnum:
-    """Lazily evaluate an IntImm in case
-    the constructor is not available in runtime.
-
-    Parameters
-    ----------
-    value : int
-        The enum value
-
-    loc : Location, optional
-        The location of the cast in the source.
-    """
-
-    def __init__(self, value: int, loc: Location = UNKNOWN_LOC) -> None:
-        self.value = value
-        self.loc = loc
-
-    def __tvm_ffi_object__(self) -> "IntImm":
-        """Convert object."""
-        return IntImm("int32", self.value, self.loc)  # type: ignore
-
-
 Var = ir.Var
-
-
-def TensorLoad(tensor: Var, indices: list[Expr], loc: Location = UNKNOWN_LOC) -> ir.TensorLoad:
-    """Construct a validated tensor load.
-
-    Parameters
-    ----------
-    tensor : Var
-        The tensor to be loaded.
-
-    indices : List[Expr]
-        The tensor indices to load values from.
-
-    loc : Location, optional
-        The location of this expression in the source code.
-
-    """
-
-    return ir.TensorLoad(tensor, indices, loc)
-
-
-class CallEffectKind:
-    """Possible kinds of Call effects."""
-
-    # only expose up to opaque
-    ExprAnnotation = IntImmEnum(0)
-    Pure = IntImmEnum(1)
-    ReadState = IntImmEnum(2)
-    UpdateState = IntImmEnum(3)
-    Opaque = UpdateState

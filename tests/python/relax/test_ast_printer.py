@@ -19,6 +19,7 @@ import re
 from functools import partial
 
 import numpy as np
+import tvm_ffi
 
 import tvm_tirx
 import tvm_tirx.testing
@@ -28,7 +29,6 @@ from tvm.relax import script as R
 from tvm.relax.testing import dump_ast
 from tvm.relax.testing.ast_printer import ASTPrinter
 from tvm.s_tir import script as Ts
-from tvm_tirx import tirx
 from tvm_tirx.script import tirx as T
 
 # Overload dump_ast to test both type and type annotations
@@ -298,7 +298,7 @@ def test_ty():
     assert printer.visit_ty_(empty_ssi) == "ShapeType(ndim=-1)"
 
     # include some dimensions
-    shape_info = rx.ShapeType([tirx.IntImm("int64", 1), tirx.IntImm("int64", 2)])
+    shape_info = rx.ShapeType([tvm_tirx.ir.IntImm("int64", 1), tvm_tirx.ir.IntImm("int64", 2)])
     assert strip_whitespace(printer.visit_ty_(shape_info)) == strip_whitespace(
         """
         ShapeType(
@@ -347,6 +347,15 @@ def test_ty():
         strip_whitespace(printer.visit_ty_(simple_func))
         == "FuncType(params=[],ret=AnyType(),purity=True)"
     )
+
+
+def test_call_packed_dictionary_attrs():
+    call = R.call_packed("test.packed_attrs", label="preserved", axis=2)
+    assert call.attrs["label"] == "preserved"
+    assert call.attrs["axis"] == 2
+    explicit = R.call_packed("test.packed_attrs", attrs_type_key="ir.DictAttrs")
+    assert isinstance(explicit.attrs, tvm_tirx.ir.DictAttrs)
+    assert len(explicit.attrs) == 0
 
 
 def test_call_packed():
@@ -663,7 +672,7 @@ def test_tuple_get_item():
 
 
 def test_prim_value():
-    prim_value = tirx.IntImm("int64", 1)
+    prim_value = tvm_tirx.ir.IntImm("int64", 1)
     prim_str = strip_whitespace(dump_ast(prim_value))
     assert prim_str == strip_whitespace(
         """
@@ -686,7 +695,7 @@ def test_string_imm():
 
 
 def test_datatype_imm():
-    data_type_imm = tvm_tirx.ir.DataTypeImm(tvm_tirx.DataType("int32"))
+    data_type_imm = tvm_tirx.ir.DataTypeImm(tvm_ffi.dtype("int32"))
     data_type_str = strip_whitespace(dump_ast(data_type_imm))
     assert data_type_str == strip_whitespace(
         """

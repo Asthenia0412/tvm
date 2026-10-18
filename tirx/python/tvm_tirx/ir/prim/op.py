@@ -30,12 +30,12 @@ def convert(expr) -> Expr:
     return _ffi_api.convert(expr)
 
 
-def min_value(dtype, loc: Location = UNKNOWN_LOC):
-    """minimum value of dtype
+def min_value(*, ty, loc: Location = UNKNOWN_LOC):
+    """minimum value of ty
 
     Parameters
     ----------
-    dtype : str
+    ty : str
         The data type.
 
     loc : Location, optional
@@ -44,17 +44,17 @@ def min_value(dtype, loc: Location = UNKNOWN_LOC):
     Returns
     -------
     value : tvm_tirx.ir.Expr
-        The minimum value of dtype.
+        The minimum value of ty.
     """
-    return _ffi_api.min_value(dtype, loc)  # type: ignore
+    return _ffi_api.min_value(ty, loc)  # type: ignore
 
 
-def max_value(dtype: str, loc: Location = UNKNOWN_LOC) -> Any:
-    """maximum value of dtype
+def max_value(*, ty: str, loc: Location = UNKNOWN_LOC) -> Any:
+    """maximum value of ty
 
     Parameters
     ----------
-    dtype : str
+    ty : str
         The data type.
 
     loc : Location, optional
@@ -63,9 +63,9 @@ def max_value(dtype: str, loc: Location = UNKNOWN_LOC) -> Any:
     Returns
     -------
     value : tvm_tirx.ir.Expr
-        The maximum value of dtype.
+        The maximum value of ty.
     """
-    return _ffi_api.max_value(dtype, loc)  # type: ignore
+    return _ffi_api.max_value(ty, loc)  # type: ignore
 
 
 def clz(x):
@@ -82,7 +82,11 @@ def clz(x):
     y : Expr
         The result.
     """
-    return Call("prim.clz", [x], ty="int32")
+    return Call(
+        "prim.clz",
+        [x],
+        ty="int32",
+    )
 
 
 def any(*args, loc: Location = UNKNOWN_LOC):
@@ -152,7 +156,7 @@ def log2(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return Call("prim.log2", [x], ty=ty, loc=loc)
+    return Call("prim.log2", [x], loc=loc, ty=ty)
 
 
 def ceil(x, loc: Location = UNKNOWN_LOC):
@@ -212,7 +216,7 @@ def bitwise_not(x, loc: Location = UNKNOWN_LOC):
     res : Expr
         The result.
     """
-    return _ffi_api.bitwise_not(x, loc)
+    return _ffi_api.BitwiseNot(x, loc)
 
 
 def bitwise_or(x, y, loc: Location = UNKNOWN_LOC):
@@ -555,7 +559,7 @@ def vscale(*, ty=None, loc: Location = UNKNOWN_LOC):
     call : Expr
         Call to the vscale intrinsic
     """
-    return Call("prim.vscale", [], ty=ty, loc=loc)
+    return Call("prim.vscale", [], loc=loc, ty=ty)
 
 
 def min(a, b, loc: Location = UNKNOWN_LOC):
@@ -568,8 +572,8 @@ def max(a, b, loc: Location = UNKNOWN_LOC):
     return _ffi_api._OpMax(a, b, loc)
 
 
-def _call_prim(ty, op, *args, loc: Location = UNKNOWN_LOC):
-    return Call(op, args, ty=ty, loc=loc)
+def _call_prim(op, *args, ty, loc: Location = UNKNOWN_LOC):
+    return Call(op, args, loc=loc, ty=ty)
 
 
 def _require_float_arg(op_name, x):
@@ -593,15 +597,15 @@ def assume(cond=None, *, ty=None, loc: Location = UNKNOWN_LOC):
     call : Expr
         The call expression.
     """
-    return _call_prim(ty, "prim.assume", cond, loc=loc)
+    return _call_prim("prim.assume", cond, loc=loc, ty=ty)
 
 
-def infinity(dtype: str, loc: Location = UNKNOWN_LOC) -> Any:
-    """infinity value of dtype
+def infinity(*, ty: str, loc: Location = UNKNOWN_LOC) -> Any:
+    """infinity value of ty
 
     Parameters
     ----------
-    dtype : str
+    ty : str
         The data type.
 
     loc : Location, optional
@@ -610,9 +614,9 @@ def infinity(dtype: str, loc: Location = UNKNOWN_LOC) -> Any:
     Returns
     -------
     value : tvm.Expr
-        The infinity value of dtype.
+        The infinity value of ty.
     """
-    return _ffi_api.infinity(dtype, loc)  # type: ignore
+    return _ffi_api.infinity(ty, loc)  # type: ignore
 
 
 def exp(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -629,7 +633,7 @@ def exp(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.exp", x, loc=loc)
+    return _call_prim("prim.exp", x, loc=loc, ty=ty)
 
 
 def exp2(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -646,7 +650,7 @@ def exp2(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.exp2", x, loc=loc)
+    return _call_prim("prim.exp2", x, loc=loc, ty=ty)
 
 
 def exp10(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -663,7 +667,7 @@ def exp10(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.exp10", x, loc=loc)
+    return _call_prim("prim.exp10", x, loc=loc, ty=ty)
 
 
 def fma(x, y, z, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -688,7 +692,7 @@ def fma(x, y, z, *, ty=None, loc: Location = UNKNOWN_LOC):
     x = convert(x)
     y = convert(y)
     z = convert(z)
-    return _call_prim(ty, "prim.fma", x, y, z, loc=loc)
+    return _call_prim("prim.fma", x, y, z, loc=loc, ty=ty)
 
 
 def erf(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -705,7 +709,7 @@ def erf(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.erf", x, loc=loc)
+    return _call_prim("prim.erf", x, loc=loc, ty=ty)
 
 
 def tanh(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -722,7 +726,7 @@ def tanh(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.tanh", x, loc=loc)
+    return _call_prim("prim.tanh", x, loc=loc, ty=ty)
 
 
 def sigmoid(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -739,7 +743,7 @@ def sigmoid(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.sigmoid", x, loc=loc)
+    return _call_prim("prim.sigmoid", x, loc=loc, ty=ty)
 
 
 def log(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -756,7 +760,7 @@ def log(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.log", x, loc=loc)
+    return _call_prim("prim.log", x, loc=loc, ty=ty)
 
 
 def log10(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -773,7 +777,7 @@ def log10(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.log10", x, loc=loc)
+    return _call_prim("prim.log10", x, loc=loc, ty=ty)
 
 
 def log1p(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -790,7 +794,7 @@ def log1p(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.log1p", x, loc=loc)
+    return _call_prim("prim.log1p", x, loc=loc, ty=ty)
 
 
 def tan(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -807,7 +811,7 @@ def tan(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = _require_float_arg("tan", x)
-    return _call_prim(ty, "prim.tan", x, loc=loc)
+    return _call_prim("prim.tan", x, loc=loc, ty=ty)
 
 
 def cos(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -824,7 +828,7 @@ def cos(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = _require_float_arg("cos", x)
-    return _call_prim(ty, "prim.cos", x, loc=loc)
+    return _call_prim("prim.cos", x, loc=loc, ty=ty)
 
 
 def cosh(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -841,7 +845,7 @@ def cosh(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.cosh", x, loc=loc)
+    return _call_prim("prim.cosh", x, loc=loc, ty=ty)
 
 
 def acos(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -858,7 +862,7 @@ def acos(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.acos", x, loc=loc)
+    return _call_prim("prim.acos", x, loc=loc, ty=ty)
 
 
 def acosh(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -875,7 +879,7 @@ def acosh(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.acosh", x, loc=loc)
+    return _call_prim("prim.acosh", x, loc=loc, ty=ty)
 
 
 def sin(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -892,7 +896,7 @@ def sin(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = _require_float_arg("sin", x)
-    return _call_prim(ty, "prim.sin", x, loc=loc)
+    return _call_prim("prim.sin", x, loc=loc, ty=ty)
 
 
 def sinh(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -909,7 +913,7 @@ def sinh(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.sinh", x, loc=loc)
+    return _call_prim("prim.sinh", x, loc=loc, ty=ty)
 
 
 def asin(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -926,7 +930,7 @@ def asin(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.asin", x, loc=loc)
+    return _call_prim("prim.asin", x, loc=loc, ty=ty)
 
 
 def asinh(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -943,7 +947,7 @@ def asinh(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.asinh", x, loc=loc)
+    return _call_prim("prim.asinh", x, loc=loc, ty=ty)
 
 
 def atan(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -960,7 +964,7 @@ def atan(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.atan", x, loc=loc)
+    return _call_prim("prim.atan", x, loc=loc, ty=ty)
 
 
 def atanh(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -977,7 +981,7 @@ def atanh(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.atanh", x, loc=loc)
+    return _call_prim("prim.atanh", x, loc=loc, ty=ty)
 
 
 def atan2(x1, x2, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -998,7 +1002,7 @@ def atan2(x1, x2, *, ty=None, loc: Location = UNKNOWN_LOC):
     """
     x1 = convert(x1)
     x2 = convert(x2)
-    return _call_prim(ty, "prim.atan2", x1, x2, loc=loc)
+    return _call_prim("prim.atan2", x1, x2, loc=loc, ty=ty)
 
 
 def sqrt(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -1015,7 +1019,7 @@ def sqrt(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.sqrt", x, loc=loc)
+    return _call_prim("prim.sqrt", x, loc=loc, ty=ty)
 
 
 def rsqrt(x, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -1032,7 +1036,7 @@ def rsqrt(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.rsqrt", x, loc=loc)
+    return _call_prim("prim.rsqrt", x, loc=loc, ty=ty)
 
 
 def floor(x: ExprWithOp, loc: Location = UNKNOWN_LOC):
@@ -1158,7 +1162,7 @@ def nextafter(x1, x2, *, ty=None, loc: Location = UNKNOWN_LOC):
     """
     x1 = convert(x1)
     x2 = convert(x2)
-    return _call_prim(ty, "prim.nextafter", x1, x2, loc=loc)  # type: ignore
+    return _call_prim("prim.nextafter", x1, x2, loc=loc, ty=ty)  # type: ignore
 
 
 def hypot(x1, x2, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -1179,7 +1183,7 @@ def hypot(x1, x2, *, ty=None, loc: Location = UNKNOWN_LOC):
     """
     x1 = convert(x1)
     x2 = convert(x2)
-    return _call_prim(ty, "prim.hypot", x1, x2, loc=loc)  # type: ignore
+    return _call_prim("prim.hypot", x1, x2, loc=loc, ty=ty)  # type: ignore
 
 
 def copysign(x1, x2, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -1200,7 +1204,7 @@ def copysign(x1, x2, *, ty=None, loc: Location = UNKNOWN_LOC):
     """
     x1 = convert(x1)
     x2 = convert(x2)
-    return _call_prim(ty, "prim.copysign", x1, x2, loc=loc)  # type: ignore
+    return _call_prim("prim.copysign", x1, x2, loc=loc, ty=ty)  # type: ignore
 
 
 def ldexp(x1, x2, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -1221,7 +1225,7 @@ def ldexp(x1, x2, *, ty=None, loc: Location = UNKNOWN_LOC):
     """
     x1 = convert(x1)
     x2 = convert(x2)
-    return _call_prim(ty, "prim.ldexp", x1, x2, loc=loc)  # type: ignore
+    return _call_prim("prim.ldexp", x1, x2, loc=loc, ty=ty)  # type: ignore
 
 
 def isnan(x, loc: Location = UNKNOWN_LOC, *, ty=None):
@@ -1240,7 +1244,7 @@ def isnan(x, loc: Location = UNKNOWN_LOC, *, ty=None):
     y : Expr
         The result.
     """
-    return Call("prim.isnan", [x], ty=ty, loc=loc)
+    return Call("prim.isnan", [x], loc=loc, ty=ty)
 
 
 def isfinite(x, loc: Location = UNKNOWN_LOC):
@@ -1317,7 +1321,7 @@ def popcount(x, *, ty=None, loc: Location = UNKNOWN_LOC):
         The result.
     """
     x = convert(x)
-    return _call_prim(ty, "prim.popcount", x, loc=loc)
+    return _call_prim("prim.popcount", x, loc=loc, ty=ty)
 
 
 def fmod(x, y, *, ty=None, loc: Location = UNKNOWN_LOC):
@@ -1337,7 +1341,7 @@ def fmod(x, y, *, ty=None, loc: Location = UNKNOWN_LOC):
     """
     x = convert(x)
     y = convert(y)
-    return _call_prim(ty, "prim.fmod", x, y, loc=loc)
+    return _call_prim("prim.fmod", x, y, loc=loc, ty=ty)
 
 
 def pow(x, y, loc: Location = UNKNOWN_LOC):

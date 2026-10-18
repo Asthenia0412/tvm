@@ -20,8 +20,8 @@ import tvm_ffi
 
 from tvm_tirx.ir.location import UNKNOWN_LOC, Location
 
-from .. import _ffi_api as _ir_ffi_api
-from ..expr import Constant, Expr, ExprWithOp, Var
+from ..expr import Expr, ExprWithOp, Var
+from ..expr import IntImm as _IntImm
 from ..type import PrimType
 from . import _ffi_api as _prim_ffi_api
 
@@ -40,96 +40,17 @@ class LogicalExpr(ExprWithOp):
     pass
 
 
-@tvm_ffi.register_object("ir.FloatImm")
-class FloatImm(Constant):
-    """Float constant.
-
-    Parameters
-    ----------
-    dtype : str
-        The data type
-
-    value : float
-        The constant value.
-
-    loc : Location, optional
-        The location of this expression in the source code.
-    """
-
-    value: float
-
-    def __init__(self, dtype: str | PrimType, value: float, loc: Location = UNKNOWN_LOC) -> None:
-        if isinstance(dtype, PrimType):
-            dtype = dtype.dtype
-        self.__init_handle_by_constructor__(
-            _ir_ffi_api.FloatImm,
-            dtype,
-            value,
-            loc,  # type: ignore
-        )
-
-    def __float__(self) -> float:
-        return self.value
-
-
-@tvm_ffi.register_object("ir.IntImm")
-class IntImm(Constant):
-    """Int constant.
-
-    Parameters
-    ----------
-    dtype : str
-        The data type
-
-    value : int
-        The constant value.
-
-    loc : Location, optional
-        The location of this expression in the source code.
-    """
-
-    value: int
-
-    def __init__(self, dtype: str | PrimType, value: int, loc: Location = UNKNOWN_LOC) -> None:
-        if isinstance(dtype, PrimType):
-            dtype = dtype.dtype
-        self.__init_handle_by_constructor__(
-            _ir_ffi_api.IntImm,
-            dtype,
-            value,
-            loc,  # type: ignore
-        )
-
-    def __hash__(self) -> int:
-        return self.value
-
-    def __int__(self) -> int:
-        return self.value
-
-    def __nonzero__(self) -> bool:
-        return self.value != 0
-
-    def __eq__(self, other: Expr) -> Expr:
-        return _prim_ffi_api._OpEQ(self, other, UNKNOWN_LOC)  # type: ignore
-
-    def __ne__(self, other: Expr) -> Expr:
-        return _prim_ffi_api._OpNE(self, other, UNKNOWN_LOC)  # type: ignore
-
-    def __bool__(self) -> bool:
-        return self.__nonzero__()
-
-
 @tvm_ffi.register_object("prim.Cast")
 class Cast(ExprWithOp):
     """Cast expression.
 
     Parameters
     ----------
+    ty : str | PrimType
+        The target primitive type.
+
     value : Expr
         The value to cast.
-
-    dtype : str | PrimType
-        The target data type.
 
     loc : Location, optional
         The location of this expression in the source code.
@@ -137,10 +58,10 @@ class Cast(ExprWithOp):
 
     value: Expr
 
-    def __init__(self, value, dtype: str | PrimType, loc: Location = UNKNOWN_LOC) -> None:
-        if isinstance(dtype, PrimType):
-            dtype = dtype.dtype
-        self.__init_handle_by_constructor__(_prim_ffi_api.Cast, value, dtype, loc)  # type: ignore
+    def __init__(self, ty: str | PrimType, value, loc: Location = UNKNOWN_LOC) -> None:
+        if isinstance(ty, PrimType):
+            ty = ty.dtype
+        self.__init_handle_by_constructor__(_prim_ffi_api.Cast, ty, value, loc)  # type: ignore
 
 
 @tvm_ffi.register_object("prim.LShift")
@@ -662,98 +583,12 @@ class Select(ExprWithOp):
         loc: Location = UNKNOWN_LOC,
     ) -> None:
         if isinstance(condition, bool):
-            condition = IntImm("bool", condition)
+            condition = _IntImm("bool", condition)
         self.__init_handle_by_constructor__(
             _prim_ffi_api.Select,
             condition,
             true_value,
             false_value,
-            loc,  # type: ignore
-        )
-
-
-@tvm_ffi.register_object("prim.Ramp")
-class Ramp(ExprWithOp):
-    """Ramp node.
-
-    Parameters
-    ----------
-    base : Expr
-        The base expression.
-
-    stride : Expr
-        The stride of the ramp.
-
-    lanes : Expr
-        The lanes of the expression.
-
-    loc : Location, optional
-        The location of this expression in the source code.
-    """
-
-    base: Expr
-    stride: Expr
-    lanes: Expr
-
-    def __init__(self, base: Expr, stride: Expr, lanes: Expr, loc: Location = UNKNOWN_LOC) -> None:
-        self.__init_handle_by_constructor__(
-            _prim_ffi_api.Ramp,
-            base,
-            stride,
-            lanes,
-            loc,  # type: ignore
-        )
-
-
-@tvm_ffi.register_object("prim.Broadcast")
-class Broadcast(ExprWithOp):
-    """Broadcast node.
-
-    Parameters
-    ----------
-    value : Expr
-        The value of the expression.
-
-    lanes : Expr
-        The lanes of the expression.
-
-    loc : Location, optional
-        The location of this expression in the source code.
-    """
-
-    value: Expr
-    lanes: Expr
-
-    def __init__(self, value: Expr, lanes: Expr, loc: Location = UNKNOWN_LOC) -> None:
-        self.__init_handle_by_constructor__(_prim_ffi_api.Broadcast, value, lanes, loc)  # type: ignore
-
-
-@tvm_ffi.register_object("prim.Shuffle")
-class Shuffle(ExprWithOp):
-    """Shuffle node.
-
-    Parameters
-    ----------
-    vectors : List[Expr]
-        The vectors
-
-    indices : List[Expr]
-        The indices
-
-    loc : Location, optional
-        The location of this expression in the source code.
-    """
-
-    vectors: list[Expr]
-    indices: list[Expr]
-
-    def __init__(
-        self, vectors: list[Expr], indices: list[Expr], loc: Location = UNKNOWN_LOC
-    ) -> None:
-        self.__init_handle_by_constructor__(
-            _prim_ffi_api.Shuffle,
-            vectors,
-            indices,
             loc,  # type: ignore
         )
 

@@ -30,24 +30,11 @@ except ImportError:
     ml_dtypes = None
 
 import tvm_ffi
-from tvm_ffi import DLDeviceType, device
+from tvm_ffi import DLDeviceType
 
 from tvm_tirx.runtime import Device
 
 from . import _ffi_api
-
-
-def from_dlpack(ext_tensor):
-    """
-    Convert an external tensor to an Tensor.
-
-    Parameters
-    ----------
-    ext_tensor : object
-        The external tensor to convert.
-
-    """
-    return tvm_ffi.from_dlpack(ext_tensor)
 
 
 @tvm_ffi.register_object("ffi.Tensor")
@@ -146,7 +133,7 @@ class Tensor(tvm_ffi.core.Tensor):
         assert source_array.flags["C_CONTIGUOUS"]
         data = source_array.ctypes.data_as(ctypes.c_void_p)
         nbytes = source_array.size * source_array.dtype.itemsize
-        _ffi_api.TVMTensorCopyFromBytes(self, data, nbytes)
+        _ffi_api.TensorCopyFromBytes(self, data, nbytes)
         return self
 
     def __repr__(self):
@@ -205,7 +192,7 @@ class Tensor(tvm_ffi.core.Tensor):
         # TODO(kathy): revisit and get a mirrored function of ffi::GetDataSize
         # in Python to replace line below
         nbytes = np_arr.size if dtype == "bool" else (np_arr.size * old_dtype.bits + 7) // 8
-        _ffi_api.TVMTensorCopyToBytes(self, data, nbytes)
+        _ffi_api.TensorCopyToBytes(self, data, nbytes)
 
         if old_dtype == "int4" or old_dtype.startswith("float4_e2m1fn"):
             length = np_arr.size
@@ -240,7 +227,7 @@ class Tensor(tvm_ffi.core.Tensor):
 
     def _copyto(self, target_nd):
         """Internal function that implements copy to target ndarray."""
-        _ffi_api.TVMTensorCopyFromTo(self, target_nd)
+        _ffi_api.TensorCopyFromTo(self, target_nd)
         return target_nd
 
     def _create_view(self, shape, dtype: str | None = None, relative_byte_offset: int = 0):
@@ -288,7 +275,7 @@ class Tensor(tvm_ffi.core.Tensor):
         if dtype is None:
             dtype = self.dtype
 
-        return _ffi_api.TVMTensorCreateView(self, shape, dtype, relative_byte_offset)
+        return _ffi_api.TensorCreateView(self, shape, dtype, relative_byte_offset)
 
 
 def empty(shape, dtype="float32", device=None, mem_scope=None):
@@ -317,7 +304,7 @@ def empty(shape, dtype="float32", device=None, mem_scope=None):
     if not isinstance(shape, tvm_ffi.Shape):
         shape = tvm_ffi.Shape([int(dim) for dim in shape])
     dtype = tvm_ffi.dtype(dtype)
-    arr = _ffi_api.TVMTensorAllocWithScope(shape, dtype, device, mem_scope)
+    arr = _ffi_api.TensorAllocWithScope(shape, dtype, device, mem_scope)
     return arr
 
 
@@ -360,7 +347,7 @@ def cpu(dev_id=0):
     dev : Device
         The created device
     """
-    return device(DLDeviceType.kDLCPU, dev_id)
+    return tvm_ffi.device(DLDeviceType.kDLCPU, dev_id)
 
 
 def cuda(dev_id=0):
@@ -376,7 +363,7 @@ def cuda(dev_id=0):
     dev : Device
         The created device
     """
-    return device(DLDeviceType.kDLCUDA, dev_id)
+    return tvm_ffi.device(DLDeviceType.kDLCUDA, dev_id)
 
 
 def rocm(dev_id=0):
@@ -392,7 +379,7 @@ def rocm(dev_id=0):
     dev : Device
         The created device
     """
-    return device(DLDeviceType.kDLROCM, dev_id)
+    return tvm_ffi.device(DLDeviceType.kDLROCM, dev_id)
 
 
 def opencl(dev_id=0):
@@ -408,7 +395,7 @@ def opencl(dev_id=0):
     dev : Device
         The created device
     """
-    return device(DLDeviceType.kDLOpenCL, dev_id)
+    return tvm_ffi.device(DLDeviceType.kDLOpenCL, dev_id)
 
 
 def metal(dev_id=0):
@@ -424,7 +411,7 @@ def metal(dev_id=0):
     dev : Device
         The created device
     """
-    return device(DLDeviceType.kDLMetal, dev_id)
+    return tvm_ffi.device(DLDeviceType.kDLMetal, dev_id)
 
 
 def vpi(dev_id=0):
@@ -440,7 +427,7 @@ def vpi(dev_id=0):
     dev : Device
         The created device
     """
-    return device(DLDeviceType.kDLVPI, dev_id)
+    return tvm_ffi.device(DLDeviceType.kDLVPI, dev_id)
 
 
 def vulkan(dev_id=0):
@@ -456,7 +443,7 @@ def vulkan(dev_id=0):
     dev : Device
         The created device
     """
-    return device(DLDeviceType.kDLVulkan, dev_id)
+    return tvm_ffi.device(DLDeviceType.kDLVulkan, dev_id)
 
 
 def ext_dev(dev_id=0):
@@ -477,7 +464,7 @@ def ext_dev(dev_id=0):
     This API is reserved for quick testing of new
     device by plugin device API as ext_dev.
     """
-    return device(DLDeviceType.kDLExtDev, dev_id)
+    return tvm_ffi.device(DLDeviceType.kDLExtDev, dev_id)
 
 
 def hexagon(dev_id=0):
@@ -493,7 +480,7 @@ def hexagon(dev_id=0):
     dev : Device
         The created device
     """
-    return device(DLDeviceType.kDLHexagon, dev_id)
+    return tvm_ffi.device(DLDeviceType.kDLHexagon, dev_id)
 
 
 def webgpu(dev_id=0):
@@ -509,7 +496,7 @@ def webgpu(dev_id=0):
     dev : Device
         The created device
     """
-    return device(DLDeviceType.kDLWebGPU, dev_id)
+    return tvm_ffi.device(DLDeviceType.kDLWebGPU, dev_id)
 
 
 # Register back to FFI

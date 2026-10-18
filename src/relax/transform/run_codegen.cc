@@ -32,8 +32,11 @@
 #include <tvm/relax/analysis.h>
 #include <tvm/relax/expr.h>
 #include <tvm/relax/expr_functor.h>
-#include <tvm/relax/op_attr_types.h>
+#include <tvm/relax/op_attr.h>
 #include <tvm/relax/transform.h>
+#include <tvm/relax/type.h>
+
+#include <algorithm>
 
 #include "../../support/ordered_set.h"
 #include "utils.h"
@@ -65,8 +68,7 @@ class CodeGenRunner : ExprMutator {
       std::vector<GlobalVar> attr_entry_functions;
       for (const auto& [gv, func] : mod->functions) {
         if (func->GetLinkageType() == LinkageType::kExternal &&
-            !func->GetAttr<ffi::String>(tvm::relax::attr::kCodegen) &&
-            func->IsInstance<relax::FunctionNode>()) {
+            !func->GetAttr(tvm::relax::attr::kCodegen) && func->IsInstance<relax::FunctionNode>()) {
           attr_entry_functions.push_back(gv);
         }
       }
@@ -79,6 +81,35 @@ class CodeGenRunner : ExprMutator {
       }
     }
 
+    // Pre-scan the module to identify BYOC functions and their param filter masks.
+    // ShapeType params (e.g. tir_vars injected by FuseOps) are symbolic variable
+    // definitions, not actual tensor inputs for the external codegen. They must
+    // be excluded both from the function passed to codegen and from the call site args.
+    for (const auto& [gv, base_func] : mod->functions) {
+      if (base_func->IsInstance<tirx::FunctionNode>()) continue;
+      PostOrderVisit(base_func, [this, &gv, &base_func](Expr e) {
+        if (e->IsInstance<FunctionNode>()) {
+          auto f = e.as_or_throw<Function>();
+          if (f->GetAttr<ffi::String>(tvm::relax::attr::kCodegen).has_value()) {
+            std::vector<bool> mask;
+            for (const auto& param : f->params) {
+              auto ty = GetType(param);
+              mask.push_back(!ty->IsInstance<ShapeTypeNode>());
+            }
+            // Only store if there are ShapeType params to filter
+            if (std::any_of(mask.begin(), mask.end(), [](bool b) { return !b; })) {
+              // We key on the GlobalVarNode* — but nested functions don't have one directly.
+              // For top-level functions we can use gvar; for nested ones we'll handle in
+              // VisitExpr_(CallNode) by looking up the function directly.
+              if (e.same_as(base_func)) {
+                param_filter_[gv.get()] = mask;
+              }
+            }
+          }
+        }
+      });
+    }
+
     for (const auto& gvar : entry_functions) {
       builder_->UpdateFunction(gvar, VisitExpr(mod->Lookup(gvar)).as_or_throw<BaseFunc>());
     }
@@ -87,11 +118,11 @@ class CodeGenRunner : ExprMutator {
     auto out_mod = builder_->GetContextIRModule();
 
     if (ext_mods.size()) {
-      if (auto opt_old_ext_mods = mod->GetAttr<ffi::Array<ffi::Module>>(tvm::attr::kExternalMods)) {
+      if (auto opt_old_ext_mods = mod->GetAttr(tvm::attr::kExternalMods)) {
         auto old_ext_mods = opt_old_ext_mods.value();
         ext_mods.insert(ext_mods.begin(), old_ext_mods.begin(), old_ext_mods.end());
       }
-      out_mod = WithAttr(out_mod, tvm::attr::kExternalMods, std::move(ext_mods));
+      out_mod = WithAttr(out_mod, tvm::attr::kExternalMods.name, std::move(ext_mods));
     }
 
     if (constant_names.size()) {
@@ -101,7 +132,7 @@ class CodeGenRunner : ExprMutator {
         TVM_FFI_ICHECK(!constants.count(name)) << "More than one constant with the name " << name;
         constants.Set(name, constant->value.cast<ffi::Tensor>());
       }
-      out_mod = WithAttr(out_mod, tvm::attr::kConstNameToConstant, std::move(constants));
+      out_mod = WithAttr(out_mod, tvm::attr::kConstNameToConstant.name, std::move(constants));
     }
 
     // TODO(@tvm-team): Implicit pass dependency. Revisit when we have a better way to handle this.
@@ -115,9 +146,34 @@ class CodeGenRunner : ExprMutator {
     if (auto const* gvar_node = call_node->op.as<GlobalVarNode>()) {
       const GlobalVar gvar = ffi::GetRef<GlobalVar>(gvar_node);
 
-      auto create_call_dps_packed = [call_node, this](Expr extern_func, Type ret_ty) {
+      // Build filtered call args, excluding args that correspond to ShapeType params
+      // (e.g. tir_vars injected by FuseOps). These are symbolic variable definitions,
+      // not actual tensor inputs for the external codegen.
+      auto get_filtered_args = [&, this]() -> ffi::Array<Expr> {
+        auto it = param_filter_.find(gvar_node);
+        if (it == param_filter_.end()) {
+          // No ShapeType params — include all args
+          ffi::Array<Expr> filtered;
+          for (const auto& arg : call_node->args) {
+            filtered.push_back(VisitExpr(arg));
+          }
+          return filtered;
+        }
+        const auto& mask = it->second;
+        TVM_FFI_ICHECK_EQ(mask.size(), call_node->args.size())
+            << "Param filter mask size does not match call args size";
+        ffi::Array<Expr> filtered;
+        for (size_t i = 0; i < call_node->args.size(); ++i) {
+          if (mask[i]) {
+            filtered.push_back(VisitExpr(call_node->args[i]));
+          }
+        }
+        return filtered;
+      };
+
+      auto create_call_dps_packed = [&, this](Expr extern_func, Type ret_ty) {
         ffi::Array<Expr> new_args({extern_func});
-        new_args.push_back(Tuple(call_node->args.Map([this](Expr arg) { return VisitExpr(arg); })));
+        new_args.push_back(Tuple(get_filtered_args()));
 
         static const Op call_op = Op::Get("relax.call_dps_packed");
 
@@ -136,8 +192,8 @@ class CodeGenRunner : ExprMutator {
           extern_funcs_.insert_or_assign(gvar_node, new_func);
           // Remove the global symbol and codegen attributes from the function so that it can be
           // removed the module.
-          func = WithoutAttr(std::move(func), tvm::attr::kGlobalSymbol);
-          func = WithoutAttr(std::move(func), tvm::relax::attr::kCodegen);
+          func = WithoutAttr(std::move(func), tvm::attr::kGlobalSymbol.name);
+          func = WithoutAttr(std::move(func), tvm::relax::attr::kCodegen.name);
           builder_->UpdateFunction(gvar, func);
           return create_call_dps_packed(new_func, ret_ty);
         }
@@ -165,7 +221,7 @@ class CodeGenRunner : ExprMutator {
 
   Expr VisitExpr_(const FunctionNode* func_node) override {
     Function func = ffi::GetRef<Function>(func_node);
-    auto opt_codegen = func->GetAttr<ffi::String>(tvm::relax::attr::kCodegen);
+    auto opt_codegen = func->GetAttr(tvm::relax::attr::kCodegen);
     if (opt_codegen) {
       auto ext_symbol = GetExtSymbol(func);
       size_t count = 0;
@@ -195,7 +251,7 @@ class CodeGenRunner : ExprMutator {
       PostOrderVisit(entry.second, [&target_functions](Expr e) {
         if (e->IsInstance<FunctionNode>()) {
           auto f = e.as_or_throw<Function>();
-          if (auto target_opt = f->GetAttr<ffi::String>(tvm::relax::attr::kCodegen)) {
+          if (auto target_opt = f->GetAttr(tvm::relax::attr::kCodegen)) {
             ffi::String target = target_opt.value();
             target_functions[target].push_back(f);
           }
@@ -225,6 +281,11 @@ class CodeGenRunner : ExprMutator {
   ffi::Map<GenericConst, ffi::String> constant_names;
   /*! \brief Extern funcs for each global variable.  */
   std::unordered_map<const GlobalVarNode*, Expr> extern_funcs_;
+  /*! \brief Param filter mask for each BYOC function. Entries are only present for
+   *  functions that have ShapeType params (e.g. tir_vars). The mask has the same size
+   *  as the function's params; a false entry means that param and its corresponding
+   *  call-site arg should be filtered out. */
+  std::unordered_map<const GlobalVarNode*, std::vector<bool>> param_filter_;
 };
 
 }  // namespace relax

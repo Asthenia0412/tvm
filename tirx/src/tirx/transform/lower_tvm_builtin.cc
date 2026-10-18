@@ -64,7 +64,7 @@ class BuiltinLower : public StmtExprMutator {
     if (!func->body.has_value()) return func;
     ffi::Optional<PrimExpr> device_type = std::nullopt;
     bool preserve_ffi_kernel = false;
-    if (auto target = func->GetAttr<Target>(tvm::attr::kTarget)) {
+    if (auto target = func->GetAttr(tvm::attr::kTarget)) {
       device_type = IntImm::Int32(target.value()->kind->default_device_type);
       auto host = target.value()->GetHost().value_or(target.value());
       preserve_ffi_kernel = host->kind->name == "cuda_host";
@@ -281,12 +281,6 @@ class BuiltinLower : public StmtExprMutator {
     DLDataType dtype = tensor_call->ty_args[0].as_or_throw<TensorType>()->dtype->dtype;
     PrimType element_type(dtype);
     auto scope = tensor_call->ty_args[0].as_or_throw<TensorType>()->scope;
-    DictAttrs annotations = tensor_call->attrs.value().as_or_throw<DictAttrs>();
-    if (annotations->dict.count(transform::kDisableLowerTVMBuiltin)) {
-      if (annotations->dict[transform::kDisableLowerTVMBuiltin].as_or_throw<IntImm>()->value) {
-        return stmt;
-      }
-    }
     if (element_type.IsScalableVector()) {
       return stmt;
     }
@@ -597,7 +591,7 @@ class BuiltinLower : public StmtExprMutator {
       PrimType arg_ty = prim_arg.ty();
       PrimType api_ty = APIType(arg_ty);
       if (arg_ty != api_ty) {
-        arg = prim::Cast(prim_arg, api_ty);
+        arg = prim::Cast(api_ty, prim_arg);
       }
       if (api_ty.MatchesCode(DLDataTypeCode::kDLBool)) {
         arg_type_index = ffi::TypeIndex::kTVMFFIBool;
@@ -811,9 +805,9 @@ namespace transform {
 
 Pass LowerTVMBuiltin() {
   auto pass_func = [](Function func, IRModule m, PassContext ctx) {
-    bool is_host = func->HasNonzeroAttr(tvm::tirx::attr::kIsHostFunc);
+    bool is_host = func->HasNonzeroAttr(tvm::tirx::attr::kIsHostFunc.name);
     if (!is_host) {
-      if (auto target = func->GetAttr<Target>(tvm::attr::kTarget)) {
+      if (auto target = func->GetAttr(tvm::attr::kTarget)) {
         is_host = target.value()->HasKey("cpu");
       }
     }

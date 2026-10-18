@@ -455,12 +455,12 @@ def test_shared_meta_var_uses_ordinary_relax_bindings():
     assert not via_i.var.same_as(via_i.value)
     assert not via_t.var.same_as(via_t.value)
     assert func.body.body.same_as(output.var)
-    source = func.script(show_all_ty=False)
+    source = func.script(extra_config={"relax.show_all_ty": False})
     assert "meta_var" not in source
     _check(func)
 
     symbol = T.dynamic("symbol", "int64")
-    with pytest.raises(tvm_tirx.error.InternalError, match="Invalid annotation"):
+    with pytest.raises(RuntimeError, match="Invalid annotation"):
 
         @R.function(private=True)
         def mismatched_binding():

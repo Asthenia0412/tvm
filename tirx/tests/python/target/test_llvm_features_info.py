@@ -15,12 +15,13 @@
 # specific language governing permissions and limitations
 # under the License.
 import pytest
+import tvm_ffi
 
 import tvm_tirx
 from tvm_tirx import codegen
 from tvm_tirx.target import Target
 
-LLVM_VERSION = codegen.llvm_version_major()
+LLVM_VERSION = codegen.llvm.version_major()
 
 
 def test_llvm_targets(capfd):
@@ -29,27 +30,25 @@ def test_llvm_targets(capfd):
     ##
 
     # check blank results
-    assert len(codegen.llvm_get_targets())
-    assert len(codegen.llvm_get_system_cpu())
-    assert len(codegen.llvm_get_system_triple())
-    assert len(codegen.llvm_get_system_x86_vendor())
+    assert len(codegen.llvm.get_targets())
+    assert len(codegen.llvm.get_system_cpu())
+    assert len(codegen.llvm.get_system_triple())
+    assert len(codegen.llvm.get_system_x86_vendor())
     # check ffi vs python
+    assert codegen.llvm.get_system_cpu() == tvm_ffi.get_global_func("codegen.llvm_get_system_cpu")()
     assert (
-        codegen.llvm_get_system_cpu() == tvm_tirx.get_global_func("codegen.llvm_get_system_cpu")()
+        codegen.llvm.get_system_triple()
+        == tvm_ffi.get_global_func("codegen.llvm_get_system_triple")()
     )
     assert (
-        codegen.llvm_get_system_triple()
-        == tvm_tirx.get_global_func("codegen.llvm_get_system_triple")()
+        codegen.llvm.get_system_x86_vendor()
+        == tvm_ffi.get_global_func("codegen.llvm_get_system_x86_vendor")()
     )
-    assert (
-        codegen.llvm_get_system_x86_vendor()
-        == tvm_tirx.get_global_func("codegen.llvm_get_system_x86_vendor")()
-    )
-    assert str(codegen.llvm_get_targets()) == str(
-        tvm_tirx.get_global_func("codegen.llvm_get_targets")()
+    assert str(codegen.llvm.get_targets()) == str(
+        tvm_ffi.get_global_func("codegen.llvm_get_targets")()
     )
 
-    tvm_tirx.codegen.llvm_get_cpu_features(
+    tvm_tirx.codegen.llvm.get_cpu_features(
         tvm_tirx.target.Target({"kind": "llvm", "mtriple": "x86_64-linux-gnu", "mcpu": "dummy"})
     )
     expected_str = (
@@ -86,7 +85,7 @@ def test_target_features(min_llvm_version, llvm_target, cpu_arch, cpu_features, 
     ## legalize llvm_target
     ##
 
-    assert llvm_target in codegen.llvm_get_targets()
+    assert llvm_target in codegen.llvm.get_targets()
 
     ##
     ## legalize cpu_arch
@@ -94,12 +93,12 @@ def test_target_features(min_llvm_version, llvm_target, cpu_arch, cpu_features, 
 
     ### with context
     with target:
-        assert cpu_arch in codegen.llvm_get_cpu_archlist()
+        assert cpu_arch in codegen.llvm.get_cpu_archlist()
     ### no context but with expicit target
-    assert cpu_arch in codegen.llvm_get_cpu_archlist(target)
+    assert cpu_arch in codegen.llvm.get_cpu_archlist(target)
     # check ffi vs python
-    assert str(codegen.llvm_get_cpu_archlist(target)) == str(
-        tvm_tirx.get_global_func("codegen.llvm_get_cpu_archlist")(target)
+    assert str(codegen.llvm.get_cpu_archlist(target)) == str(
+        tvm_ffi.get_global_func("codegen.llvm_get_cpu_archlist")(target)
     )
 
     ##
@@ -108,11 +107,11 @@ def test_target_features(min_llvm_version, llvm_target, cpu_arch, cpu_features, 
 
     ### with context
     with target:
-        assert codegen.llvm_cpu_has_features(cpu_features) == is_supported
+        assert codegen.llvm.cpu_has_features(cpu_features) == is_supported
     ### no context but with expicit target
-    assert codegen.llvm_cpu_has_features(cpu_features, target) == is_supported
+    assert codegen.llvm.cpu_has_features(cpu_features, target) == is_supported
     # check ffi vs python
     for feat in cpu_features:
-        assert str(codegen.llvm_cpu_has_features(feat, target)) == str(
-            tvm_tirx.get_global_func("codegen.llvm_cpu_has_feature")(feat, target)
+        assert str(codegen.llvm.cpu_has_features(feat, target)) == str(
+            tvm_ffi.get_global_func("codegen.llvm_cpu_has_feature")(feat, target)
         )

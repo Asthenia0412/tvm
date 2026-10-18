@@ -226,7 +226,7 @@ llvm::DISubprogram* CodeGenCPU::CreateDebugFunction(llvm::StringRef name,
 }
 
 llvm::DISubprogram* CodeGenCPU::CreateDebugFunction(const GlobalVar& gvar, const Function& func) {
-  std::string name = func->GetAttr<ffi::String>(tvm::attr::kGlobalSymbol).value_or(gvar->name_hint);
+  std::string name = func->GetAttr(tvm::attr::kGlobalSymbol).value_or(gvar->name_hint);
   return CreateDebugFunction(name, func->params.Map([](const Var& var) { return var->ty; }),
                              func->ret_type);
 }
@@ -236,7 +236,7 @@ void CodeGenCPU::AddFunction(const GlobalVar& gvar, const Function& func) {
   EmitDebugLocation(func->loc);
   CodeGenLLVM::AddFunction(gvar, func);
   if (f_tvm_register_system_symbol_ != nullptr) {
-    if (auto global_symbol = func->GetAttr<ffi::String>(tvm::attr::kGlobalSymbol)) {
+    if (auto global_symbol = func->GetAttr(tvm::attr::kGlobalSymbol)) {
       export_system_symbols_.emplace_back(
           std::make_pair(global_symbol.value().operator std::string(), function_));
     }
@@ -411,6 +411,7 @@ CodeGenLLVM::TypedPointer CodeGenCPU::CreateStructRefPtr(Type type, llvm::Value*
     }
     default:
       TVM_FFI_THROW(InternalError) << "unknown field code";
+      TVM_FFI_UNREACHABLE();
   }
 }
 
@@ -1192,7 +1193,7 @@ void CodeGenCPU::Dispatch_(const ForNode* op) {
       parallel_env_.in_parallel_loop = true;
       PrimExpr end = IsZero(op->min) ? op->extent : analyzer_->Simplify(op->min + op->extent);
       bool stride_pattern = false;
-      if (auto it = op->annotations.find(tvm::codegen::attr::kParallelStridePattern);
+      if (auto it = op->annotations.find(tvm::codegen::attr::kParallelStridePattern.name);
           it != op->annotations.end()) {
         ffi::Any annotation = (*it).second;
         if (auto value = annotation.as<bool>()) {

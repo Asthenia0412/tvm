@@ -29,7 +29,6 @@ from tvm_tirx.ir import Expr, Scriptable, Var, const
 from tvm_tirx.ir.location import UNKNOWN_LOC, Location
 from tvm_tirx.ir.prim import _ffi_api as _prim_ffi_api
 from tvm_tirx.ir.prim import max_value, min_value
-from tvm_tirx.runtime import Object
 from tvm_tirx.tirx.op import _primexpr_dtype
 
 from . import _ffi_api
@@ -45,7 +44,7 @@ def _iter_var_type():
 
 
 @tvm_ffi.register_object("te.CommReducer")
-class CommReducer(Object, Scriptable):
+class CommReducer(tvm_ffi.Object, Scriptable):
     """Commutative reduce operator
 
     Parameters
@@ -227,7 +226,7 @@ def comm_reducer(fcombine, fidentity, name="reduce"):
             if init is not None:
                 init = [init]
         combiner = CommReducer(lhs, rhs, result, id_elem)
-        if not isinstance(axis, list | tuple | tvm_tirx.ir.Array):
+        if not isinstance(axis, list | tuple | tvm_ffi.Array):
             axis = [axis]
         if where is None:
             where = tir.convert(True)
@@ -289,5 +288,13 @@ def comm_reducer(fcombine, fidentity, name="reduce"):
 
 
 sum = comm_reducer(lambda x, y: x + y, lambda t: const(0, dtype=t), name="sum")
-min = comm_reducer(lambda x, y: _prim_ffi_api._OpMin(x, y, UNKNOWN_LOC), max_value, name="min")  # type: ignore
-max = comm_reducer(lambda x, y: _prim_ffi_api._OpMax(x, y, UNKNOWN_LOC), min_value, name="max")  # type: ignore
+min = comm_reducer(
+    lambda x, y: _prim_ffi_api._OpMin(x, y, UNKNOWN_LOC),
+    lambda dtype: max_value(ty=dtype),
+    name="min",
+)  # type: ignore
+max = comm_reducer(
+    lambda x, y: _prim_ffi_api._OpMax(x, y, UNKNOWN_LOC),
+    lambda dtype: min_value(ty=dtype),
+    name="max",
+)  # type: ignore

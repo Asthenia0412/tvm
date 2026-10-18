@@ -21,8 +21,8 @@
  * \file tvm/tirx/function.h
  * \brief TIR Function.
  */
-#ifndef TVM_TIR_FUNCTION_H_
-#define TVM_TIR_FUNCTION_H_
+#ifndef TVM_TIRX_FUNCTION_H_
+#define TVM_TIRX_FUNCTION_H_
 
 #include <tvm/ffi/container/map.h>
 #include <tvm/ffi/container/variant.h>
@@ -145,18 +145,16 @@ TVM_TIRX_DLL Function RenewDef(Function func);
  * \param func The Function to be specialized.
  * \param param_map The mapping from function params to the instance.
  * \return The new function with parameter specialized.
- * \note We can define a Meta TIR function with symbolic shape:
+ * \note We can define a TIRx function with symbolic shape:
  *
  * \code{.py}
  *  from __future__ import annotations
  *
- *  @Ts.function
+ *  @T.function
  *  def mem_copy(A: T.Tensor((m, n), "float32"), B: T.Tensor((m, n), "float32"),
  *               m: T.int32, n: T.int32) -> None:
  *      for i, j in T.grid(m, n):
- *          with Ts.sblock():
- *              vi, vj = Ts.axis.remap("SS", [i, j])
- *              B[vi, vj] = A[vi, vj]
+ *          B[i, j] = A[i, j]
  * \endcode
  *
  * Then we can make it specialized with given shapes or tensors.
@@ -169,13 +167,11 @@ TVM_TIRX_DLL Function RenewDef(Function func);
  * \endcode
  *
  * \code{.py}
- *  @Ts.function
+ *  @T.function
  *  def mem_copy_16_16(A: T.Tensor((16, 16), "float32"),
  *                     B: T.Tensor((16, 16), "float32")) -> None:
  *      for i, j in T.grid(16, 16):
- *          with Ts.sblock():
- *              vi, vj = Ts.axis.remap("SS", [i, j])
- *              B[vi, vj] = A[vi, vj]
+ *          B[i, j] = A[i, j]
  * \endcode
  */
 TVM_TIRX_DLL Function Specialize(Function func,
@@ -238,45 +234,46 @@ namespace attr {
  *
  * \sa tvm::CallingConv::kDeviceKernelLaunch
  */
-constexpr const char* kKernelLaunchParams = "tirx.kernel_launch_params";
+inline constexpr ffi::reflection::AttrKey<ffi::Array<ffi::String>> kKernelLaunchParams{
+    "tirx.kernel_launch_params"};
 
 /*!
  * \brief Whether to set noalias rule on the function arguments.
  *
- * Type: IntImm
+ * Type: bool
  */
-constexpr const char* kNoAlias = "tirx.noalias";
+inline constexpr ffi::reflection::AttrKey<bool> kNoAlias{"tirx.noalias"};
 
 /*!
  * \brief Mark the function as the entry function of
  *        the final generated runtime module.
  *
- * Type: IntImm
+ * Type: bool
  *
  * \note There can only be one entry function per module.
  */
-constexpr const char* kIsEntryFunc = "tirx.is_entry_func";
+inline constexpr ffi::reflection::AttrKey<bool> kIsEntryFunc{"tirx.is_entry_func"};
 
 /*!
  * \brief Mark the function as the global function called from the host.
  *
- * Type: IntImm
+ * Type: bool
  */
-constexpr const char* kIsGlobalFunc = "tirx.is_global_func";
+inline constexpr ffi::reflection::AttrKey<bool> kIsGlobalFunc{"tirx.is_global_func"};
 
 /*!
  * \brief Mark the function as run on the host, mutually exclusive with kTarget.
  *
- * Type: IntImm
+ * Type: bool
  */
-constexpr const char* kIsHostFunc = "tirx.is_host_func";
+inline constexpr ffi::reflection::AttrKey<bool> kIsHostFunc{"tirx.is_host_func"};
 
 /*!
  * \brief Mark the kernel as persistent.
  */
-constexpr const char* kPersistentKernel = "tirx.persistent_kernel";
+inline constexpr ffi::reflection::AttrKey<bool> kPersistentKernel{"tirx.persistent_kernel"};
 
 }  // namespace attr
 }  // namespace tirx
 }  // namespace tvm
-#endif  // TVM_TIR_FUNCTION_H_
+#endif  // TVM_TIRX_FUNCTION_H_

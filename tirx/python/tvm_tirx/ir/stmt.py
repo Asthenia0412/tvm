@@ -24,13 +24,12 @@ import tvm_ffi
 
 from tvm_tirx.ir import DictAttrs, Expr, Location, Op, Scriptable, StringImm, Var, make_node
 from tvm_tirx.ir.location import UNKNOWN_LOC
-from tvm_tirx.runtime import Object
 
 from . import _ffi_api
 
 
 @tvm_ffi.register_object("ir.Stmt")
-class Stmt(Object, Scriptable):
+class Stmt(tvm_ffi.Object, Scriptable):
     """Base class of all the statements."""
 
 
@@ -74,11 +73,11 @@ class AssertStmt(Stmt):
 
     Parameters
     ----------
-    kind : StringImm
-        The error kind, e.g. "RuntimeError", "TypeError", "ValueError".
-
     condition : Expr
         The assert condition.
+
+    error_kind : StringImm
+        The error kind, e.g. "RuntimeError", "TypeError", "ValueError".
 
     message_parts : list[StringImm]
         Error message fragments, concatenated at runtime when assertion fails.
@@ -87,15 +86,15 @@ class AssertStmt(Stmt):
         The location of the stmt in the source code.
     """
 
-    kind: StringImm
     condition: Expr
+    error_kind: StringImm
     message_parts: list
     loc: Location
 
     def __init__(
         self,
-        kind: StringImm,
         condition: Expr,
+        error_kind: StringImm,
         message_parts: list | None = None,
         loc: Location = UNKNOWN_LOC,
     ) -> None:
@@ -103,8 +102,8 @@ class AssertStmt(Stmt):
             message_parts = []
         self.__init_handle_by_constructor__(
             _ffi_api.AssertStmt,
-            kind,
             condition,
+            error_kind,
             message_parts,
             loc,  # type: ignore
         )
@@ -146,7 +145,7 @@ class For(Stmt):
     body : Stmt | Sequence[Stmt]
         The body statement.
 
-    annotations: Optional[Mapping[str, Object]]
+    annotations: Optional[Mapping[str, tvm_ffi.Object]]
         Additional loop annotations interpreted by the consuming dialect.
 
     step : Expr
@@ -161,7 +160,7 @@ class For(Stmt):
     extent: Expr
     kind: ForKind
     body: "SeqStmt"
-    annotations: Mapping[str, Object]
+    annotations: Mapping[str, tvm_ffi.Object]
     step: Expr | None
     loc: Location
 
@@ -172,7 +171,7 @@ class For(Stmt):
         extent: Expr,
         kind: ForKind,
         body: Stmt | Sequence[Stmt],
-        annotations: Mapping[str, Object] | None = None,
+        annotations: Mapping[str, tvm_ffi.Object] | None = None,
         step: Expr | None = None,
         loc: Location = UNKNOWN_LOC,
     ) -> None:

@@ -286,7 +286,7 @@ def test_ptx_predicated_destination_preserves_old_value():
         T.device_entry(launch=T.cuda.LaunchConfig(grid=(1,), block=(32,)))
         tx = T.cuda.thread_idx("x")
         value: T.float32 = T.float32(0)
-        pred: T.uint32 = T.cast(tx == 0, "uint32")
+        pred: T.uint32 = T.cast(tx == 0, ty="uint32")
         T.ptx.ld.global_.f32(value, A.ptr_to([0]), pred=pred, preserve_dst=True)
         T.ptx.ex2.approx.ftz.f32(value, value, pred=pred, preserve_dst=True)
         Out[tx] = value
@@ -305,7 +305,7 @@ def test_ptx_predicated_destination_is_undefined_by_default():
         T.device_entry(launch=T.cuda.LaunchConfig(grid=(1,), block=(32,)))
         tx = T.cuda.thread_idx("x")
         value = T.local_scalar("float32")
-        pred: T.uint32 = T.cast(tx == 0, "uint32")
+        pred: T.uint32 = T.cast(tx == 0, ty="uint32")
         T.ptx.ld.global_.f32(value, A.ptr_to([0]), pred=pred)
         Out[tx] = T.if_then_else(pred != 0, value, T.float32(0))
 
@@ -1842,7 +1842,7 @@ def test_ptx_logic_shift_dispatch():
             d = T.local_scalar("uint32")
             T.ptx.lop3.b32(d, A[0], A[0], A[0], A[0])
 
-    with pytest.raises((ValueError, tvm_tirx.error.InternalError), match="compile-time constants"):
+    with pytest.raises((ValueError, RuntimeError), match="compile-time constants"):
         _cuda_source(lut_runtime)
 
     @T.function
@@ -2209,7 +2209,7 @@ def test_ptx_wgmma_scale_d_runtime_predicate_roundtrip():
     def kernel(Out: T.Tensor((128,), "uint32")):
         T.device_entry(launch=T.cuda.LaunchConfig(grid=(1,), block=(128,)))
         tx = T.cuda.thread_idx("x")
-        scale_d: T.uint32 = T.cast(tx < 128, "uint32")
+        scale_d: T.uint32 = T.cast(tx < 128, ty="uint32")
         d0: T.uint32 = T.uint32(0)
         d1: T.uint32 = T.uint32(0)
         d2: T.uint32 = T.uint32(0)
@@ -2300,7 +2300,7 @@ def test_ptx_tcgen05_mma_ws_collector_dispatch(form, collector):
         T.device_entry(launch=T.cuda.LaunchConfig(grid=(1,), block=(32,)))
         T.ptx[opcode](
             T.uint32(0),
-            T.cast(0, a_dtype),
+            T.cast(0, ty=a_dtype),
             T.uint64(0),
             T.uint32(0),
             T.ptx.pred(T.uint32(0)),
@@ -3155,8 +3155,8 @@ def test_ptx_tcgen05_mapa_address_coercion():
     raw_u64 = tvm_tirx.tirx.Var("a64", "uint64")
     ncols = tvm_tirx.tirx.Var("n", "uint32")
     mask = tvm_tirx.tirx.Var("mask", "uint16")
-    out32 = tvm_tirx.tirx.decl_tensor((1,), "uint32", name="out32", scope="local")
-    out64 = tvm_tirx.tirx.decl_tensor((1,), "uint64", name="out64", scope="local")
+    out32 = tvm_tirx.tirx.Var("out32", tvm_tirx.tirx.TensorType((1,), "uint32", scope="local"))
+    out64 = tvm_tirx.tirx.Var("out64", tvm_tirx.tirx.TensorType((1,), "uint64", scope="local"))
 
     bare_alloc = T.ptx.tcgen05.alloc.cta_group__1.sync.aligned.b32(generic_ptr, ncols)
     assert bare_alloc.args[0].same_as(generic_ptr)
@@ -3813,7 +3813,7 @@ def test_ptx_coercion_ir_forms():
     call = T.ptx.st.release.gpu.global_.b32(global_ptr, val, pred=flag)
     assert call.args[2].same_as(flag)
     assert len(call.args) == 2 + 1 + 8 + 1  # operands + pred + slot tokens + marker
-    out = tvm_tirx.tirx.decl_tensor((1,), "uint32", name="out", scope="local")
+    out = tvm_tirx.tirx.Var("out", tvm_tirx.tirx.TensorType((1,), "uint32", scope="local"))
     call = T.ptx.ld.global_.b32(out[0], global_ptr, pred=flag)
     assert str(call.args[-1]).strip('"') == "pred"
     call = T.ptx.ld.global_.b32(out[0], global_ptr, pred=flag, preserve_dst=True)

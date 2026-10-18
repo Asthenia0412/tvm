@@ -24,7 +24,6 @@ import tvm_ffi
 from tvm_ffi.dataclasses import Enum
 
 import tvm_tirx
-from tvm_tirx.runtime import Object
 from tvm_tirx.tirx.expr import Expr
 
 from . import _ffi_api
@@ -32,10 +31,7 @@ from .thread_scope import ThreadScope
 
 
 @tvm_ffi.register_object("tirx.Layout")
-class Layout(Object):
-    def __init__(self):
-        self.__init_handle_by_constructor__(_ffi_api.Layout)  # pylint: disable=no-member
-
+class Layout(tvm_ffi.Object):
     def verify_well_formed(self) -> bool:
         """Verify if the layout is well-formed.
 
@@ -144,7 +140,7 @@ class Layout(Object):
         # Python ``int`` -> int32 IntImm and breaks structural-equal).
         for t in data:
             if tvm_tirx.ir.is_prim_expr(t) and t.ty.dtype != "int32":
-                from .expr import IntImm  # pylint: disable=import-outside-toplevel
+                from tvm_tirx.ir import IntImm  # pylint: disable=import-outside-toplevel
 
                 stride = IntImm(t.ty, stride)
                 break
@@ -507,7 +503,7 @@ def _to_offset_expr(x: _OffsetExprLike) -> _OffsetExpr:
 
 
 @tvm_ffi.register_object("tirx.Iter")
-class Iter(Object):
+class Iter(tvm_ffi.Object):
     """A memory layout that tiles data across devices."""
 
     extent: Expr
@@ -577,6 +573,14 @@ class TileLayout(Layout):
         if offset:
             offset = {Axis.get(k) if isinstance(k, str) else k: v for k, v in offset.items()}
         return _ffi_api.TileLayout(shard, replica, offset or {})  # pylint: disable=no-member
+
+    def is_contiguous(self, analyzer=None) -> bool:
+        """Whether memory-only tile strides are contiguous, regardless of origin.
+
+        Replicas and non-memory axes are rejected. An optional analyzer supplies
+        existing constraints; symbolic proof is otherwise initialized lazily.
+        """
+        return _ffi_api.TileLayoutIsContiguous(self, analyzer)
 
     def is_trivial(self) -> bool:
         """Check if the layout is trivial."""

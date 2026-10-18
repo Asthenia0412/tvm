@@ -19,8 +19,6 @@
 
 from collections.abc import Callable
 
-import tvm_ffi as _ffi
-
 from . import _ffi_api
 from .function_pass import function_pass
 
@@ -104,11 +102,6 @@ def PointerValueTypeRewrite():
     return _ffi_api.PointerValueTypeRewrite()  # type: ignore
 
 
-@_ffi.register_object("tirx.transform.UnrollLoopConfig")
-class UnrollLoopConfig(_ffi.Object):
-    """Config for unroll loop pass"""
-
-
 def UnrollLoop():
     """Unroll the constant loop marked by unroll.
 
@@ -120,11 +113,6 @@ def UnrollLoop():
         The result pass
     """
     return _ffi_api.UnrollLoop()  # type: ignore
-
-
-@_ffi.register_object("tirx.transform.RemoveNoOpConfig")
-class RemoveNoOpConfig(_ffi.Object):
-    """Config for remove no op pass"""
 
 
 def RemoveNoOp():
@@ -267,8 +255,7 @@ def MakePackedAPI():
     `TensorType`.  This pass consumes those annotations to generate
     arguments that implement the packed based TVM FFI API.
 
-    For static shapes, the `TensorType::shape`, `TensorType::strides`,
-    and `TensorType::elem_offset` fields are used to
+    For static shapes, the tensor shape and layout are used to
     generate runtime checks on the corresponding member variables in
     the user-provided `DLTensor*` or `tvm_tirx.runtime.tensor` argument.  (e.g. A
     Function that accepts a tensor of shape `[16,32]` validates that
@@ -451,12 +438,16 @@ def TileDispatch():
     return _ffi_api.TileDispatch()  # type: ignore
 
 
-def LowerTIRx():
-    """Lower TIR to a lower-level IR.
+def LowerTensorLayouts():
+    """Apply tensor layouts to physical storage and accesses.
+
+    Run after :py:func:`TileDispatch` for generic tile compilation, or
+    independently on already dispatched IR. Backends may pair TileDispatch
+    with their own layout-lowering pass.
 
     Returns
     -------
     fpass : tvm_tirx.ir.transform.Pass
         The result pass
     """
-    return _ffi_api.LowerTIRx()  # type: ignore
+    return _ffi_api.LowerTensorLayouts()  # type: ignore

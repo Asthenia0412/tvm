@@ -29,7 +29,7 @@
 #include <tvm/ir/prim/op.h>
 #include <tvm/runtime/base.h>
 #include <tvm/runtime/memory_scope.h>
-#include <tvm/tirx/op_attr_types.h>
+#include <tvm/tirx/op/attr.h>
 #include <tvm/tirx/type.h>
 
 #include <string>
@@ -62,8 +62,6 @@ Type InferTypeDeclTmem(const CallNode* call) {
                     addr_type.bits() == 32,
                 TypeError)
       << "decl_tmem address must be a scalar 32-bit integer";
-  TVM_FFI_CHECK(prim::IsZero(type->elem_offset) && type->strides.empty(), ValueError)
-      << "decl_tmem addresses use physical columns; express tensor offsets through the layout";
   return type;
 }
 

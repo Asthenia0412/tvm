@@ -24,6 +24,7 @@
 
 #include <tvm/backend/cuda/attr.h>
 #include <tvm/ffi/reflection/accessor.h>
+#include <tvm/ffi/reflection/registry.h>
 #include <tvm/ir/function.h>
 #include <tvm/ir/op.h>
 #include <tvm/ir/prim/op.h>
@@ -231,7 +232,7 @@ class TileDispatcher : public StmtExprMutator {
   Stmt ProcessDeviceEntry(const RegionStmtNode* entry_node) {
     Stmt body_to_visit = entry_node->body;
     Target saved_target = target_;
-    if (auto target = entry_node->attrs->dict.Get(tvm::attr::kTarget)) {
+    if (auto target = entry_node->attrs->dict.Get(tvm::attr::kTarget.name)) {
       target_ = target.value().cast<Target>();
     }
     With<Target> target_scope(target_);
@@ -242,7 +243,7 @@ class TileDispatcher : public StmtExprMutator {
     launch_params_.clear();
     cluster_bounds_.clear();
     variable_cluster_ = false;
-    native_launch_ = entry_node->attrs->dict.count(tvm::backend::cuda::attr::kLaunchFields);
+    native_launch_ = entry_node->attrs->dict.count(tvm::backend::cuda::attr::kLaunchFields.name);
     TVM_FFI_CHECK(is_first_block || !native_launch_, ValueError)
         << "Nested CUDA device_entry regions are not supported";
     if (native_launch_) PrepareCudaLaunchParams(entry_node);
@@ -501,21 +502,21 @@ class TileDispatcher : public StmtExprMutator {
     tile::DispatchContext sctx(target_, scope, launch_params_, var_range_map_,
                                /*alloc_only=*/false, /*callbacks=*/{}, shared_state_, inter_map,
                                intra_map, scope_kind);
-    Function res = tile::Dispatch(ffi::GetRef<Call>(op), sctx);
+    Stmt res = tile::Dispatch(ffi::GetRef<Call>(op), sctx);
     // Implementation found, handle callbacks
-    if (auto bufs = sctx->callbacks.Get(tirx::tile::callback::kPrivateAlloc)) {
+    if (auto bufs = sctx->callbacks.Get(tirx::tile::callback::kPrivateAlloc.name)) {
       auto buf_list = bufs.value().as<Array<Bind>>().value();
       alloc_tensors_.insert(alloc_tensors_.end(), buf_list.begin(), buf_list.end());
     }
-    if (auto stmts = sctx->callbacks.Get(tirx::tile::callback::kDeviceInitStmt)) {
+    if (auto stmts = sctx->callbacks.Get(tirx::tile::callback::kDeviceInitStmt.name)) {
       auto stmt_list = stmts.value().as<Array<Stmt>>().value();
       device_init_stmts_.insert(device_init_stmts_.end(), stmt_list.begin(), stmt_list.end());
     }
-    if (auto stmts = sctx->callbacks.Get(tirx::tile::callback::kHostInitStmt)) {
+    if (auto stmts = sctx->callbacks.Get(tirx::tile::callback::kHostInitStmt.name)) {
       auto stmt_list = stmts.value().as<Array<Stmt>>().value();
       host_init_stmts_.insert(host_init_stmts_.end(), stmt_list.begin(), stmt_list.end());
     }
-    if (auto mapping = sctx->callbacks.Get(tirx::tile::callback::kPostTensorDefStmt)) {
+    if (auto mapping = sctx->callbacks.Get(tirx::tile::callback::kPostTensorDefStmt.name)) {
       auto map = mapping.value().as_or_throw<ffi::Map<TensorVar, Array<Stmt>>>();
       for (const auto& [tensor, stmts] : map) {
         auto& vec = post_tensor_def_stmts_[tensor];
@@ -524,8 +525,7 @@ class TileDispatcher : public StmtExprMutator {
     }
     // Propagate shared_state changes back (Map uses COW semantics)
     shared_state_ = sctx->shared_state;
-    TVM_FFI_CHECK(res->body.has_value(), ValueError) << "A tile op implementation must have a body";
-    return Mutate(res->body.value(), inplace_mode).ValueOrUnchanged(res->body.value());
+    return Mutate(res, inplace_mode).ValueOrUnchanged(res);
   }
 
   // --- Scope-id resolution at kernel scope ----------------------------------
@@ -533,7 +533,7 @@ class TileDispatcher : public StmtExprMutator {
   void PrepareCudaLaunchParams(const RegionStmtNode* entry) {
     TVM_FFI_CHECK(target_->kind->name == "cuda", ValueError)
         << "CUDA LaunchConfig requires a CUDA target";
-    auto fields = entry->attrs->dict.at(tvm::backend::cuda::attr::kLaunchFields)
+    auto fields = entry->attrs->dict.at(tvm::backend::cuda::attr::kLaunchFields.name)
                       .as_or_throw<ffi::Array<ffi::String>>();
     TVM_FFI_ICHECK_EQ(fields.size(), entry->args.size());
     for (size_t i = 0; i < fields.size(); ++i) {
@@ -620,7 +620,7 @@ class TileDispatcher : public StmtExprMutator {
 
 namespace {
 Target ResolveTarget(const Function& f) {
-  auto target = f->GetAttr<Target>(tvm::attr::kTarget);
+  auto target = f->GetAttr(tvm::attr::kTarget);
   if (!target.has_value()) {
     target = Target::Current(false).value();
   }
@@ -642,6 +642,11 @@ Pass TileDispatch() {
     return f;
   };
   return CreateFunctionPass(pass_func, 0, "tirx.TileDispatch");
+}
+
+TVM_FFI_STATIC_INIT_BLOCK() {
+  namespace refl = tvm::ffi::reflection;
+  refl::GlobalDef().def("tirx.transform.TileDispatch", TileDispatch);
 }
 
 }  // namespace transform
