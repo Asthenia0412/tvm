@@ -20,11 +20,12 @@
 import operator
 from functools import reduce
 
+import tvm_ffi
+
 import tvm
 import tvm_tirx
 from tvm.relax import transform
 from tvm.relax.transform import PatternCheckContext
-from tvm_tirx import DataType
 from tvm_tirx.sym import Analyzer
 
 from ..pattern_registry import get_patterns_with_prefix, register_patterns
@@ -75,7 +76,7 @@ def _check_matmul(context: PatternCheckContext) -> bool:
     lhs_shape = lhs.ty.shape.values
     rhs_shape = rhs.ty.shape.values
 
-    if not isinstance(lhs_shape[-1], tvm_tirx.tirx.expr.IntImm | int):
+    if not isinstance(lhs_shape[-1], tvm_tirx.ir.IntImm | int):
         # Reduction axis must be constant
         return False
 
@@ -83,7 +84,7 @@ def _check_matmul(context: PatternCheckContext) -> bool:
         if lhs_shape[-1] % 4 != 0:
             # Reduction axis must be multiples of 4 for IGEMM
             return False
-        if not isinstance(rhs_shape[-1], tvm_tirx.tirx.expr.IntImm | int) or rhs_shape[-1] % 4 != 0:
+        if not isinstance(rhs_shape[-1], tvm_tirx.ir.IntImm | int) or rhs_shape[-1] % 4 != 0:
             # Rows number must be multiples of 4 for IGEMM
             return False
     elif lhs_dtype == "float8_e4m3fn" and rhs_dtype == "float8_e4m3fn":
@@ -103,13 +104,13 @@ def _check_matmul(context: PatternCheckContext) -> bool:
 
         # cuBLAS FP8 operations require all tensors being aligned to 16 bytes.
         if (
-            not isinstance(rhs_shape[-1], tvm_tirx.tirx.expr.IntImm | int)
-            or rhs_shape[-1] % (16 // DataType(lhs_dtype).itemsize) != 0
+            not isinstance(rhs_shape[-1], tvm_tirx.ir.IntImm | int)
+            or rhs_shape[-1] % (16 // tvm_ffi.dtype(lhs_dtype).itemsize) != 0
         ):
             return False
         if (
-            not isinstance(rhs_shape[-2], tvm_tirx.tirx.expr.IntImm | int)
-            or rhs_shape[-2] % (16 // DataType(out_dtype).itemsize) != 0
+            not isinstance(rhs_shape[-2], tvm_tirx.ir.IntImm | int)
+            or rhs_shape[-2] % (16 // tvm_ffi.dtype(out_dtype).itemsize) != 0
         ):
             return False
 
@@ -123,7 +124,7 @@ def _check_matmul(context: PatternCheckContext) -> bool:
         bias = context.annotated_expr["bias"]
         bias_shape = bias.ty.shape.values
         bias_batches = reduce(operator.mul, bias_shape[:-1], 1)
-        if not isinstance(bias_batches, tvm_tirx.tirx.expr.IntImm | int) or int(bias_batches) > 1:
+        if not isinstance(bias_batches, tvm_tirx.ir.IntImm | int) or int(bias_batches) > 1:
             # cuBLAS only supports bias vector
             return False
 

@@ -18,8 +18,8 @@
 """Setup Trainer Pass."""
 
 import tvm_tirx
+from tvm_tirx.ir import IntImm
 from tvm_tirx.ir.module import IRModule
-from tvm_tirx.tirx.expr import IntImm
 
 from ..analysis import check_well_formed
 from ..expr import Tuple
@@ -127,8 +127,7 @@ class SetupTrainer:
         self._legalize = legalize
 
     def _check_well_formed(self, mod: IRModule):
-        if not check_well_formed(mod):
-            raise ValueError("SetupTrainer: The backbone module is not well formed.")
+        check_well_formed(mod)
         try:
             func = mod[self.BACKBONE_FUNC]
         except (KeyError, ValueError) as exc:

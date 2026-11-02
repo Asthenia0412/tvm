@@ -16,17 +16,15 @@
 # under the License.
 """An execution trace of a scheduling program"""
 
-import os
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+import tvm_ffi
 from tvm_ffi import Array, Map
 from tvm_ffi import register_object as _register_object
 
-from tvm_tirx.ir import save_json
-from tvm_tirx.runtime import Object
-from tvm_tirx.tirx.expr import FloatImm, IntImm
-from tvm_tirx.tirx.function import IndexMap
+from tvm_tirx.ir import FloatImm, IntImm, save_json
+from tvm_tirx.tirx.index_map import IndexMap
 
 from . import _ffi_api
 from .instruction import ATTR_TYPE, INPUT_RV_TYPE, Instruction
@@ -59,7 +57,7 @@ def _json_from_tvm(obj):
 
 
 @_register_object("s_tir.Trace")
-class Trace(Object):
+class Trace(tvm_ffi.Object):
     """An execution trace of a scheduling program.
 
     A trace has two parts:
@@ -270,7 +268,7 @@ class Trace(Object):
         """
         _ffi_api.TraceApplyJSONToSchedule(json_obj, sch)  # type: ignore # pylint: disable=no-member
 
-    def show(self, style: str | None = None, black_format: bool = False) -> None:
+    def show(self, style: str | None = None) -> None:
         """A sugar for print highlighted TVM script.
 
         Parameters
@@ -280,18 +278,9 @@ class Trace(Object):
             Pygmentize printing style, auto-detected if None.  See
             `tvm_tirx.script.printer.highlight.cprint` for more details.
 
-        black_format: bool
-
-            If true, use the formatter Black to format the TVMScript.
-            If None, determine based on the "TVM_BLACK_FORMAT" environment
-            variable.
         """
         from tvm_tirx.script.printer.highlight import (  # pylint: disable=import-outside-toplevel
             cprint,
         )
 
-        if black_format is None:
-            env = os.environ.get("TVM_BLACK_FORMAT")
-            black_format = bool(env and int(env))
-
-        cprint(str(self), style=style, black_format=black_format)
+        cprint(str(self), style=style)

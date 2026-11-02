@@ -28,6 +28,7 @@ import tvm_tirx
 import tvm_tirx.testing
 from tvm.relax import script as R
 from tvm.s_tir import script as Ts
+from tvm.testing import env as tvm_env
 from tvm_tirx.script import ir as I
 from tvm_tirx.script import tirx as T
 from tvm_tirx.testing import env
@@ -35,7 +36,7 @@ from tvm_tirx.testing import env
 
 @pytest.mark.gpu
 @pytest.mark.skipif(tvm.runtime.disco is None, reason="disco runtime is not available")
-@pytest.mark.skipif(not env.has_nccl(), reason="need nccl")
+@pytest.mark.skipif(not tvm_env.has_nccl(), reason="need nccl")
 @pytest.mark.skipif(not env.has_multi_gpu(), reason="need multiple gpus")
 def test_callback():
     """Simulate lazy loading of parameters in a callback
@@ -112,7 +113,7 @@ def test_callback():
         temp_dir = pathlib.Path(temp_dir)
 
         # TODO(Lunderberg): Update `disco.Session.load_vm_module` to
-        # allow a `tvm.runtime.Module` argument.  This would avoid the
+        # allow a `tvm_ffi.Module` argument.  This would avoid the
         # need for a temporary file.
         shlib_path = temp_dir.joinpath("libtemp.so")
         built.export_library(shlib_path)

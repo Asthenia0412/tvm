@@ -34,9 +34,7 @@ from .common import LegalizeFunc, _try_convert_to_scalar_const, register_legaliz
 def _full(is_like: bool, fill_value: float | None, function_name: str) -> LegalizeFunc:
     def full_call_te(bb: BlockBuilder, call: Call) -> Expr:
         _fill_value = (
-            _try_convert_to_scalar_const(call.args[1], python_native=True)
-            if fill_value is None
-            else fill_value
+            _try_convert_to_scalar_const(call.args[1]) if fill_value is None else fill_value
         )
         shape = call.args[0].ty.shape if is_like else call.args[0]
 
@@ -123,7 +121,7 @@ def _arange(bb: BlockBuilder, call: Call) -> Expr:
     dtype = call.attrs.dtype
 
     def is_const_scalar(x: tirx.Expr):
-        return isinstance(x, tirx.IntImm | tirx.FloatImm)
+        return isinstance(x, tvm_tirx.ir.IntImm | tvm_tirx.ir.FloatImm)
 
     if all([is_const_scalar(x) for x in call.args]):
         return const(np.arange(start.value, end.value, step.value, dtype=dtype), dtype=dtype)
@@ -139,16 +137,16 @@ def _shape_to_tensor(bb: BlockBuilder, call: Call) -> Expr:
         return call
     values = list(values)
     n = len(values)
-    symbolic = [v for v in values if not isinstance(v, tirx.IntImm)]
+    symbolic = [v for v in values if not isinstance(v, tvm_tirx.ir.IntImm)]
 
     def te_shape_to_tensor(*sym):
         sym = list(sym)
-        resolved = [v if isinstance(v, tirx.IntImm) else sym.pop(0) for v in values]
+        resolved = [v if isinstance(v, tvm_tirx.ir.IntImm) else sym.pop(0) for v in values]
 
         def fcompute(i):
             result = tirx.const(0, "int64")
             for idx in range(n - 1, -1, -1):
-                result = tirx.if_then_else(i == idx, tirx.Cast(resolved[idx], "int64"), result)
+                result = tirx.if_then_else(i == idx, tirx.Cast("int64", resolved[idx]), result)
             return result
 
         return te.compute((n,), fcompute, name="shape_to_tensor")

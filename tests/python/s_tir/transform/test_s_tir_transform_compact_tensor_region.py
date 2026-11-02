@@ -409,7 +409,9 @@ class TestStorageAlign(BaseCompactTest):
             with Ts.sblock():
                 Ts.reads(A[i, 0:16])
                 Ts.writes(C[i, 0:16])
-                B = Ts.sblock_alloc_tensor((1, 16), strides=(31, 1), dtype="float32")
+                B = Ts.sblock_alloc_tensor(
+                    (1, 16), layout=T.TileLayout(T.S[(1, 16) : (31, 1)]), dtype="float32"
+                )
                 for j in range(0, 16):
                     with Ts.sblock():
                         Ts.reads(A[i, j])
@@ -1273,7 +1275,7 @@ def test_loop_var_does_not_escape_compacted_tensor_extent():
                 tmp[j] = A[j]
 
     after = s_tir.transform.CompactTensorAllocation()(tvm_tirx.IRModule.from_expr(before))
-    assert s_tir.analysis.verify_well_formed(after)
+    s_tir.analysis.check_well_formed(after)
 
 
 class TestCompactSymbolicBound0:

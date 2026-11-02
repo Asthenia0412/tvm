@@ -112,17 +112,21 @@ def _odd_even_sort(
         start = bx * block_size
 
         # Tensor declarations without data allocate their storage.
-        tmp_keys_swap = T.bind(
+        tmp_keys_swap = T.bind_(
             T.alloc_tensor(ty_args=[T.Tensor([block_size], keys_swap.dtype, scope="shared")])
         )
-        temp_keys = T.bind(T.alloc_tensor(ty_args=[T.Tensor([1], keys_swap.dtype, scope="local")]))
-        temp_cond1 = T.bind(T.alloc_tensor(ty_args=[T.Tensor([1], keys_swap.dtype, scope="local")]))
-        temp_cond2 = T.bind(T.alloc_tensor(ty_args=[T.Tensor([1], keys_swap.dtype, scope="local")]))
+        temp_keys = T.bind_(T.alloc_tensor(ty_args=[T.Tensor([1], keys_swap.dtype, scope="local")]))
+        temp_cond1 = T.bind_(
+            T.alloc_tensor(ty_args=[T.Tensor([1], keys_swap.dtype, scope="local")])
+        )
+        temp_cond2 = T.bind_(
+            T.alloc_tensor(ty_args=[T.Tensor([1], keys_swap.dtype, scope="local")])
+        )
         if values_swap is not None:
-            tmp_values_swap = T.bind(
+            tmp_values_swap = T.bind_(
                 T.alloc_tensor(ty_args=[T.Tensor([block_size], values_swap.dtype, scope="shared")])
             )
-            temp_values = T.bind(
+            temp_values = T.bind_(
                 T.alloc_tensor(ty_args=[T.Tensor([1], values_swap.dtype, scope="local")])
             )
 
@@ -150,7 +154,11 @@ def _odd_even_sort(
                         )
 
         T.evaluate(
-            tvm_tirx.ir.Call("tirx.gpu_storage_sync", [tvm_tirx.ir.StringImm("shared")], ty="void")
+            tvm_tirx.ir.Call(
+                "tirx.gpu_storage_sync",
+                [tvm_tirx.ir.StringImm("shared")],
+                ty="void",
+            )
         )
 
         idxm = tvm_tirx.tirx.indexmod
@@ -181,7 +189,9 @@ def _odd_even_sort(
                                 T.tensor_store(tmp_values_swap, [tid + n + 1], temp_values[0])
             T.evaluate(
                 tvm_tirx.ir.Call(
-                    "tirx.gpu_storage_sync", [tvm_tirx.ir.StringImm("shared")], ty="void"
+                    "tirx.gpu_storage_sync",
+                    [tvm_tirx.ir.StringImm("shared")],
+                    ty="void",
                 )
             )
 
@@ -410,10 +420,10 @@ def _sort_common(
         step_count,
         even,
     ):
-        first_buf = T.bind(T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")]))
-        last_buf = T.bind(T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")]))
-        i_buf_buf = T.bind(T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")]))
-        j_buf_buf = T.bind(T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")]))
+        first_buf = T.bind_(T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")]))
+        last_buf = T.bind_(T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")]))
+        i_buf_buf = T.bind_(T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")]))
+        j_buf_buf = T.bind_(T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")]))
         first = first_buf
         last = last_buf
         i_buf = i_buf_buf
@@ -477,16 +487,16 @@ def _sort_common(
         step_count,
         even,
     ):
-        outer_first_buf = T.bind(
+        outer_first_buf = T.bind_(
             T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")])
         )
-        outer_last_buf = T.bind(
+        outer_last_buf = T.bind_(
             T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")])
         )
-        first_buf = T.bind(T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")]))
-        last_buf = T.bind(T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")]))
-        i_buf_buf = T.bind(T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")]))
-        j_buf_buf = T.bind(T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")]))
+        first_buf = T.bind_(T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")]))
+        last_buf = T.bind_(T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")]))
+        i_buf_buf = T.bind_(T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")]))
+        j_buf_buf = T.bind_(T.alloc_tensor(ty_args=[T.Tensor([1], target_dtype, scope="local")]))
         outer_first = outer_first_buf
         outer_last = outer_last_buf
         first = first_buf
@@ -782,11 +792,12 @@ def sort(data, axis=-1, is_ascend=1):
         axes = swap(list(range(ndim)), axis)
         data = transpose(data, axes)
 
-    value_buf = tvm_tirx.tirx.decl_tensor(
-        data.shape, data.dtype, "value_buf", data_alignment=8, layout=None
+    value_buf = tvm_tirx.tirx.Var(
+        "value_buf", tvm_tirx.tirx.TensorType(data.shape, data.dtype, data_alignment=8, layout=None)
     )
-    value_buf_swap = tvm_tirx.tirx.decl_tensor(
-        data.shape, data.dtype, "value_buf_swap", data_alignment=8, layout=None
+    value_buf_swap = tvm_tirx.tirx.Var(
+        "value_buf_swap",
+        tvm_tirx.tirx.TensorType(data.shape, data.dtype, data_alignment=8, layout=None),
     )
 
     out = te.extern(
@@ -840,11 +851,14 @@ def sort_thrust(data, axis=-1, is_ascend=1, workspace=None):
         axes = swap(list(range(ndim)), axis)
         data = transpose(data, axes)
 
-    value_buf = tvm_tirx.tirx.decl_tensor(
-        data.shape, data.dtype, "value_buf", data_alignment=8, layout=None
+    value_buf = tvm_tirx.tirx.Var(
+        "value_buf", tvm_tirx.tirx.TensorType(data.shape, data.dtype, data_alignment=8, layout=None)
     )
-    indices_buf = tvm_tirx.tirx.decl_tensor(
-        data.shape, dtype, "out_buf", data_alignment=8, layout=None
+    indices_buf = tvm_tirx.tirx.Var(
+        "out_buf",
+        tvm_tirx.tirx.TensorType(
+            data.shape, "float32" if dtype is None else dtype, data_alignment=8, layout=None
+        ),
     )
 
     def f_compute(ins, outs):
@@ -906,17 +920,24 @@ def argsort(data, axis=-1, is_ascend=1, dtype="float32", ret_type="indices"):
         axes = swap(list(range(ndim)), axis)
         data = transpose(data, axes)
 
-    value_buf = tvm_tirx.tirx.decl_tensor(
-        data.shape, data.dtype, "value_buf", data_alignment=8, layout=None
+    value_buf = tvm_tirx.tirx.Var(
+        "value_buf", tvm_tirx.tirx.TensorType(data.shape, data.dtype, data_alignment=8, layout=None)
     )
-    value_swap_buf = tvm_tirx.tirx.decl_tensor(
-        data.shape, data.dtype, "value_swap_buf", data_alignment=8, layout=None
+    value_swap_buf = tvm_tirx.tirx.Var(
+        "value_swap_buf",
+        tvm_tirx.tirx.TensorType(data.shape, data.dtype, data_alignment=8, layout=None),
     )
-    indices_buf = tvm_tirx.tirx.decl_tensor(
-        data.shape, dtype, "out_buf", data_alignment=8, layout=None
+    indices_buf = tvm_tirx.tirx.Var(
+        "out_buf",
+        tvm_tirx.tirx.TensorType(
+            data.shape, "float32" if dtype is None else dtype, data_alignment=8, layout=None
+        ),
     )
-    indices_swap_buf = tvm_tirx.tirx.decl_tensor(
-        data.shape, dtype, "out_swap_buf", data_alignment=8, layout=None
+    indices_swap_buf = tvm_tirx.tirx.Var(
+        "out_swap_buf",
+        tvm_tirx.tirx.TensorType(
+            data.shape, "float32" if dtype is None else dtype, data_alignment=8, layout=None
+        ),
     )
 
     outs = te.extern(
@@ -1022,17 +1043,25 @@ def topk(data, k=1, axis=-1, ret_type="both", is_ascend=False, dtype="int64"):
         axes = swap(list(range(ndim)), axis)
         data = transpose(data, axes)
 
-    values_buf = tvm_tirx.tirx.decl_tensor(
-        data.shape, data.dtype, "values_buf", data_alignment=8, layout=None
+    values_buf = tvm_tirx.tirx.Var(
+        "values_buf",
+        tvm_tirx.tirx.TensorType(data.shape, data.dtype, data_alignment=8, layout=None),
     )
-    values_swap_buf = tvm_tirx.tirx.decl_tensor(
-        data.shape, data.dtype, "values_swap_buf", data_alignment=8, layout=None
+    values_swap_buf = tvm_tirx.tirx.Var(
+        "values_swap_buf",
+        tvm_tirx.tirx.TensorType(data.shape, data.dtype, data_alignment=8, layout=None),
     )
-    indices_buf = tvm_tirx.tirx.decl_tensor(
-        data.shape, dtype, "indices_buf", data_alignment=8, layout=None
+    indices_buf = tvm_tirx.tirx.Var(
+        "indices_buf",
+        tvm_tirx.tirx.TensorType(
+            data.shape, "float32" if dtype is None else dtype, data_alignment=8, layout=None
+        ),
     )
-    indices_swap_buf = tvm_tirx.tirx.decl_tensor(
-        data.shape, dtype, "indies_swap_buf", data_alignment=8, layout=None
+    indices_swap_buf = tvm_tirx.tirx.Var(
+        "indies_swap_buf",
+        tvm_tirx.tirx.TensorType(
+            data.shape, "float32" if dtype is None else dtype, data_alignment=8, layout=None
+        ),
     )
 
     if ret_type == "values":
@@ -1133,20 +1162,29 @@ def topk_thrust(
         axes = swap(list(range(ndim)), axis)
         data = transpose(data, axes)
 
-    data_buf = tvm_tirx.tirx.decl_tensor(
-        data.shape, data.dtype, "data_buf", data_alignment=8, layout=None
+    data_buf = tvm_tirx.tirx.Var(
+        "data_buf", tvm_tirx.tirx.TensorType(data.shape, data.dtype, data_alignment=8, layout=None)
     )
     if workspace is not None:
-        workspace_buf = tvm_tirx.tirx.decl_tensor(
-            workspace.shape, workspace.dtype, "workspace_buf", data_alignment=8, layout=None
+        workspace_buf = tvm_tirx.tirx.Var(
+            "workspace_buf",
+            tvm_tirx.tirx.TensorType(
+                workspace.shape, workspace.dtype, data_alignment=8, layout=None
+            ),
         )
     else:
         workspace_buf = None
     out_bufs = [
-        tvm_tirx.tirx.decl_tensor(
-            data.shape, data.dtype, "value_buf", data_alignment=8, layout=None
+        tvm_tirx.tirx.Var(
+            "value_buf",
+            tvm_tirx.tirx.TensorType(data.shape, data.dtype, data_alignment=8, layout=None),
         ),
-        tvm_tirx.tirx.decl_tensor(data.shape, dtype, "indices_buf", data_alignment=8, layout=None),
+        tvm_tirx.tirx.Var(
+            "indices_buf",
+            tvm_tirx.tirx.TensorType(
+                data.shape, "float32" if dtype is None else dtype, data_alignment=8, layout=None
+            ),
+        ),
     ]
 
     def f_compute(ins, outs):
@@ -1167,7 +1205,7 @@ def topk_thrust(
         tag="topk_gpu",
     )
 
-    if isinstance(k, tvm_tirx.tirx.IntImm):
+    if isinstance(k, tvm_tirx.ir.IntImm):
         k = k.value
 
     if not isinstance(k, int) or k > 0:

@@ -25,6 +25,7 @@ Use "android" as the key if you wish to avoid modifying this script.
 import os
 
 import numpy as np
+import tvm_ffi
 
 import tvm
 import tvm_tirx
@@ -49,7 +50,7 @@ test_vulkan = False
 
 def test_rpc_module():
     # graph
-    n = tvm_tirx.runtime.convert(1024)
+    n = tvm_ffi.convert(1024)
     A = te.placeholder((n,), name="A")
     B = te.compute(A.shape, lambda *i: A(*i) + 1.0, name="B")
     a_np = np.random.uniform(size=1024).astype(A.dtype)
@@ -79,7 +80,7 @@ def test_rpc_module():
         f1 = remote.load_module("dev_lib_cl.so")
         a = dev.tensor(a_np)
         b = dev.tensor(np.zeros(1024, dtype=A.dtype))
-        time_f = f1.time_evaluator(f1.entry_name, dev, number=10)
+        time_f = tvm.runtime.time_evaluator(f1, f1.entry_name, dev, number=10)
         cost = time_f(a, b).mean
         print(f"{cost:g} secs/op\n")
         np.testing.assert_equal(b.numpy(), a.numpy() + 1)

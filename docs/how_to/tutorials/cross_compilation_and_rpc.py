@@ -53,8 +53,8 @@ and the Firefly-RK3399 for an OpenCL example.
 #   git clone --recursive https://github.com/apache/tvm tvm
 #   cd tvm
 #   mkdir build && cd build
-#   cp ../cmake/config.cmake .
-#   cmake .. && cmake --build . --parallel $(nproc)
+#   cmake .. -DTVM_TIRX_USE_LLVM=OFF -DTVM_TIRX_USE_CUDA=OFF
+#   cmake --build . --parallel $(nproc)
 #
 # After building the runtime successfully, we need to set environment variables
 # in :code:`~/.bashrc` file. We can edit :code:`~/.bashrc`
@@ -102,7 +102,7 @@ import tvm_tirx
 from tvm import rpc, te
 from tvm_tirx.support import utils
 
-n = tvm_tirx.runtime.convert(1024)
+n = tvm_ffi.convert(1024)
 A = te.placeholder((n,), name="A")
 B = te.compute((n,), lambda i: A[i] + 1.0, name="B")
 mod = tvm_tirx.IRModule.from_expr(te.create_function([A, B]).with_attr("global_symbol", "add_one"))
@@ -196,7 +196,7 @@ np.testing.assert_equal(b.numpy(), a.numpy() + 1)
 # function over number times, measures the cost per run on the remote
 # device and returns the measured cost. Network overhead is excluded.
 
-time_f = func.time_evaluator("add_one", dev, number=10)
+time_f = tvm.runtime.time_evaluator(func, "add_one", dev, number=10)
 cost = time_f(a, b).mean
 print(f"{cost:g} secs/op")
 
@@ -278,7 +278,7 @@ print(f"{cost:g} secs/op")
 #   set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 #
 # Build the runtime from the TVM repository root.  Enable target-specific
-# options such as ``USE_OPENCL`` or vendor runtime support in ``config.cmake``.
+# CMake options such as ``-DTVM_TIRX_USE_OPENCL=ON`` or vendor runtime support.
 # Build any target-specific runtime libraries that your deployment needs, such
 # as ``tvm_runtime_opencl`` for OpenCL.
 #
@@ -286,14 +286,11 @@ print(f"{cost:g} secs/op")
 #
 #   mkdir cross_build
 #   cd cross_build
-#   cp ../cmake/config.cmake ./
-#
-#   # Enable other options as needed, e.g. USE_OPENCL or vendor runtimes.
-#   sed -i "s|USE_LLVM.*)|USE_LLVM OFF)|" config.cmake
-#
-#   cmake -DCMAKE_TOOLCHAIN_FILE=/YYY/aarch64-linux-gnu.cmake -DCMAKE_BUILD_TYPE=Release ..
+#   # Enable other options as needed, e.g. TVM_TIRX_USE_OPENCL or vendor runtimes.
+#   cmake .. -DTVM_TIRX_USE_LLVM=OFF -DTVM_TIRX_USE_CUDA=OFF \
+#     -DCMAKE_TOOLCHAIN_FILE=/YYY/aarch64-linux-gnu.cmake -DCMAKE_BUILD_TYPE=Release
 #   cmake --build . --target runtime -j
-#   # Optional example when USE_OPENCL is enabled:
+#   # Optional example when TVM_TIRX_USE_OPENCL is enabled:
 #   # cmake --build . --target tvm_runtime_opencl -j
 #   cd ..
 #
@@ -405,9 +402,8 @@ print(f"{cost:g} secs/op")
 # .. code-block:: bash
 #
 #    mkdir -p build && cd build
-#    cp ../cmake/config.cmake .
-#    sed -i "s/USE_OPENCL OFF/USE_OPENCL ON/" config.cmake
-#    cmake .. && cmake --build . --parallel $(nproc)
+#    cmake .. -DTVM_TIRX_USE_OPENCL=ON -DTVM_TIRX_USE_LLVM=OFF -DTVM_TIRX_USE_CUDA=OFF
+#    cmake --build . --parallel $(nproc)
 #
 # The following function shows how we run an OpenCL kernel remotely
 

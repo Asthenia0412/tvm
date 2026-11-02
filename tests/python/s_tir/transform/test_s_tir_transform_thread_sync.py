@@ -96,7 +96,7 @@ def test_sync_inside_condition():
             for i, j in T.grid(4, 4):
                 A[i, j] = A_shared[i, j] + 1.0
 
-    with pytest.raises(tvm_tirx.error.InternalError):
+    with pytest.raises(RuntimeError):
         s_tir.transform.ThreadSync("shared")(tvm_tirx.IRModule.from_expr(func1))
 
     for func in (func2, func3):
@@ -159,7 +159,7 @@ def test_sync_shared_aliasing_tensor_views():
             shared_storage.data, ty_args=[T.Tensor((16,), "float32", scope="shared")]
         )
         for i in range(2):
-            shared_half[threadIdx_x] = T.Cast(A[i * 32 + threadIdx_x], "float16")
+            shared_half[threadIdx_x] = T.Cast("float16", A[i * 32 + threadIdx_x])
             T.gpu_storage_sync("shared")
             local[0] = shared_float[threadIdx_x % 16]
             A[i * 32 + threadIdx_x] = local[0]
@@ -191,13 +191,13 @@ def test_sync_bind():
             in_thread_A_temp.data, ty_args=[T.Tensor((1,), "float32", scope="local")]
         )
         in_thread_A_temp_1[0] = T.float32(0)
-        A_temp_1 = T.bind(in_thread_A_temp_1[0] + A_shared_1[threadIdx_x])
+        A_temp_1 = in_thread_A_temp_1[0] + A_shared_1[threadIdx_x]
         in_thread_A_temp_1[0] = A_temp_1
-        A_temp_2 = T.bind(in_thread_A_temp_1[0] + A_shared_1[threadIdx_x + 128])
+        A_temp_2 = in_thread_A_temp_1[0] + A_shared_1[threadIdx_x + 128]
         in_thread_A_temp_1[0] = A_temp_2
-        A_temp_3 = T.bind(in_thread_A_temp_1[0] + A_shared_1[threadIdx_x + 256])
+        A_temp_3 = in_thread_A_temp_1[0] + A_shared_1[threadIdx_x + 256]
         in_thread_A_temp_1[0] = A_temp_3
-        A_temp_4 = T.bind(in_thread_A_temp_1[0] + A_shared_1[threadIdx_x + 384])
+        A_temp_4 = in_thread_A_temp_1[0] + A_shared_1[threadIdx_x + 384]
         in_thread_A_temp_1[0] = A_temp_4
         cross_thread_A_temp_1 = T.decl_tensor(
             cross_thread_A_temp.data, ty_args=[T.Tensor((1,), "float32", scope="local")]
@@ -228,13 +228,13 @@ def test_sync_bind():
         )
         in_thread_A_temp_1_1[0] = T.float32(0)
         T.evaluate(T.call_intrin("tirx.gpu_storage_sync", "shared", ty="int32"))
-        A_temp_1 = T.bind(in_thread_A_temp_1_1[0] + A_shared_1_1[threadIdx_x])
+        A_temp_1 = in_thread_A_temp_1_1[0] + A_shared_1_1[threadIdx_x]
         in_thread_A_temp_1_1[0] = A_temp_1
-        A_temp_2 = T.bind(in_thread_A_temp_1_1[0] + A_shared_1_1[threadIdx_x + 128])
+        A_temp_2 = in_thread_A_temp_1_1[0] + A_shared_1_1[threadIdx_x + 128]
         in_thread_A_temp_1_1[0] = A_temp_2
-        A_temp_3 = T.bind(in_thread_A_temp_1_1[0] + A_shared_1_1[threadIdx_x + 256])
+        A_temp_3 = in_thread_A_temp_1_1[0] + A_shared_1_1[threadIdx_x + 256]
         in_thread_A_temp_1_1[0] = A_temp_3
-        A_temp_4 = T.bind(in_thread_A_temp_1_1[0] + A_shared_1_1[threadIdx_x + 384])
+        A_temp_4 = in_thread_A_temp_1_1[0] + A_shared_1_1[threadIdx_x + 384]
         in_thread_A_temp_1_1[0] = A_temp_4
         cross_thread_A_temp_1_1 = T.decl_tensor(
             cross_thread_A_temp_1.data, ty_args=[T.Tensor((1,), "float32", scope="local")]

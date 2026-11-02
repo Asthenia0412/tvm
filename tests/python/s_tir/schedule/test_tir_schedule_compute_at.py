@@ -1052,7 +1052,13 @@ def static_bound_after_compute_at(A: T.Tensor((32, 1), "float32"), C: T.Tensor((
 # pylint: enable=no-member,invalid-name,unused-variable,line-too-long,redefined-outer-name,unexpected-keyword-arg,too-many-nested-blocks
 # fmt: on
 
-use_block_name = tvm_tirx.testing.parameter(by_dict={"block_obj": False, "block_name": True})
+
+@pytest.fixture(
+    params=[pytest.param(False, id="block_obj"), pytest.param(True, id="block_name")],
+    scope="session",
+)
+def use_block_name(request):
+    return request.param
 
 
 def test_compute_at_two_elementwise(use_block_name):
@@ -1496,8 +1502,8 @@ def test_compute_at_to_index():
                     with Ts.init():
                         conv[nn, ff, yy, xx] = 0
                     conv[nn, ff, yy, xx] = conv[nn, ff, yy, xx] + T.cast(
-                        pad[nn, rc, yy * 2 + ry, xx * 2 + rx], "int32"
-                    ) * T.cast(wbuf[ff, rc, ry, rx], "int32")
+                        pad[nn, rc, yy * 2 + ry, xx * 2 + rx], ty="int32"
+                    ) * T.cast(wbuf[ff, rc, ry, rx], ty="int32")
 
     @Ts.function
     def multi_producers_after_compute_at(
@@ -1537,8 +1543,8 @@ def test_compute_at_to_index():
                     with Ts.init():
                         conv[nn, ff, yy, xx] = 0
                     conv[nn, ff, yy, xx] = conv[nn, ff, yy, xx] + T.cast(
-                        pad[nn, rc, yy * 2 + ry, xx * 2 + rx], "int32"
-                    ) * T.cast(wbuf[ff, rc, ry, rx], "int32")
+                        pad[nn, rc, yy * 2 + ry, xx * 2 + rx], ty="int32"
+                    ) * T.cast(wbuf[ff, rc, ry, rx], ty="int32")
 
     sch = tvm.s_tir.Schedule(multi_producers_conv, debug_mask="all")
     block_c = sch.get_sblock("pad")

@@ -104,7 +104,7 @@ Pass MetaScheduleApplyDatabase(ffi::Optional<ffi::String> work_dir, bool enable_
     for (const auto& iter : mod->functions) {
       GlobalVar gv = iter.first;
       BaseFunc base_func = iter.second;
-      if (const auto* function_node = base_func.as<tirx::FunctionNode>()) {
+      if (const auto* function_node = base_func.as<tirx::FunctionObj>()) {
         tirx::Function function = ffi::GetRef<tirx::Function>(function_node);
 
         IRModule tir_mod = (*normalize_mod_func_)(function).cast<IRModule>();
@@ -126,14 +126,15 @@ Pass MetaScheduleApplyDatabase(ffi::Optional<ffi::String> work_dir, bool enable_
           IRModule new_mod = sch->mod();
           TVM_FFI_ICHECK_EQ(new_mod->functions.size(), 1);
           BaseFunc new_base_func = (*new_mod->functions.begin()).second;
-          TVM_FFI_ICHECK(new_base_func->IsInstance<tirx::FunctionNode>());
+          TVM_FFI_ICHECK(new_base_func->IsInstance<tirx::FunctionObj>());
           tirx::Function tuned_function = new_base_func.as_or_throw<tirx::Function>();
           // maintain the original attributes
           tirx::Function new_function = tirx::Function(/*params=*/tuned_function->params,
                                                        /*body=*/tuned_function->body,
                                                        /*ret_type=*/tuned_function->ret_type,
                                                        /*attrs=*/function->attrs);
-          new_function = WithAttr(std::move(new_function), tvm::s_tir::attr::kIsScheduled, true);
+          new_function =
+              WithAttr(std::move(new_function), tvm::s_tir::attr::kIsScheduled.name, true);
           result.Set(gv, new_function);
           continue;
         } else if (enable_warning) {
@@ -143,7 +144,6 @@ Pass MetaScheduleApplyDatabase(ffi::Optional<ffi::String> work_dir, bool enable_
       result.Set(gv, base_func);
     }
     return IRModule(result,       // functions
-                    {},           // map
                     mod->attrs);  // attrs);
   };
   return CreateModulePass(pass_func, 0, "MetaScheduleApplyDatabase");

@@ -23,6 +23,7 @@ And configure the proxy host field as commented.
 import argparse
 
 import numpy as np
+import tvm_ffi
 
 import tvm
 import tvm_tirx
@@ -38,14 +39,14 @@ MODES = {"proxy": rpc.connect, "tracker": rpc.connect_tracker, "standalone": rpc
 
 
 # override metal compiler to compile to iphone
-@tvm_tirx.register_global_func("tvm_callback_metal_compile")
+@tvm_ffi.register_global_func("tvm_callback_metal_compile")
 def compile_metal(src, target):
     return xcode.compile_metal(src, sdk=sdk)
 
 
 def test_rpc_module(host, port, key, mode):
     # graph
-    n = tvm_tirx.runtime.convert(1024)
+    n = tvm_ffi.convert(1024)
     A = te.placeholder((n,), name="A")
     B = te.compute(A.shape, lambda *i: A(*i) + 1.0, name="B")
     temp = utils.tempdir()
@@ -75,7 +76,7 @@ def test_rpc_module(host, port, key, mode):
     a_np = np.random.uniform(size=1024).astype(A.dtype)
     a = dev.tensor(a_np)
     b = dev.tensor(np.zeros(1024, dtype=A.dtype))
-    time_f = f1.time_evaluator(f1.entry_name, dev, number=10)
+    time_f = tvm.runtime.time_evaluator(f1, f1.entry_name, dev, number=10)
     cost = time_f(a, b).mean
     print(f"Metal: {cost:g} secs/op")
     np.testing.assert_equal(b.numpy(), a.numpy() + 1)

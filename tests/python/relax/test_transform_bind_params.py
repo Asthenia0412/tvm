@@ -28,7 +28,10 @@ from tvm.relax import script as R
 from tvm.s_tir import script as Ts
 from tvm_tirx.script import tirx as T
 
-use_np_array = tvm_tirx.testing.parameter(False, True)
+
+@pytest.fixture(params=[False, True], scope="session")
+def use_np_array(request):
+    return request.param
 
 
 def test_bind_params(use_np_array):
@@ -118,7 +121,7 @@ def test_bind_params_symbolic_vars():
     params_dict = {"w0": w0_tvm, "b0": b0_tvm, "w1": w1_tvm, "b1": b1_tvm}
     mod = relax.transform.BindParams("main", params_dict)(Before)
 
-    # Since it contains ConstantNode, it's hard to check with structural equality.
+    # Since it contains ConstantObj, it's hard to check with structural equality.
     func = mod["main"]
     assert len(func.params) == 1
     batch = func.params[0].ty.shape[0]
@@ -190,7 +193,9 @@ def test_bind_params_rejects_non_primitive_standalone_symbolic_var():
         before.bind_params({n: relax.const(np.array(5, dtype="int64"))})
 
 
-param_specification = tvm_tirx.testing.parameter("by_string", "by_var")
+@pytest.fixture(params=["by_string", "by_var"], scope="session")
+def param_specification(request):
+    return request.param
 
 
 def test_bind_params_by_var_obj(param_specification):

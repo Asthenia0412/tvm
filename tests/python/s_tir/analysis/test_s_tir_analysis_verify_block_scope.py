@@ -29,14 +29,15 @@ def test_tensor_region_bounds_are_visited():
     data = tvm_tirx.tirx.Var(
         "data", tvm_tirx.ir.PtrType(tvm_tirx.ir.PrimType("int32"), scope="global")
     )
-    tensor = tvm_tirx.tirx.decl_tensor([4], "int32", data=data)
+    tensor = tvm_tirx.tirx.Var("tensor", tvm_tirx.tirx.TensorType([4], "int32", data=data))
     undefined = tvm_tirx.tirx.Var("undefined", "int32")
     region = TensorRegion(
         tensor, [tvm_tirx.ir.Range.from_min_extent(undefined, 4)], ty=TensorRegionType()
     )
     block = tvm.s_tir.SBlock([], [region], [], "region", tvm_tirx.ir.Evaluate(0))
     func = tvm_tirx.tirx.Function([tensor], block)
-    assert not tvm.s_tir.analysis.verify_well_formed(func, assert_mode=False)
+    with pytest.raises(RuntimeError):
+        tvm.s_tir.analysis.check_well_formed(func)
 
 
 def test_fail_use_out_loop_var():
@@ -51,7 +52,8 @@ def test_fail_use_out_loop_var():
                 # we cannot use `i` since it's defined outside the block
                 B[vi, vj] = A[i, vj] * 2.0
 
-    assert not tvm.s_tir.analysis.verify_well_formed(element_wise, assert_mode=False)
+    with pytest.raises(RuntimeError):
+        tvm.s_tir.analysis.check_well_formed(element_wise)
 
 
 def test_block_match_tensor_defines_tensor_obj():
@@ -70,7 +72,7 @@ def test_block_match_tensor_defines_tensor_obj():
                     )
                     B[i, j] = 0.0
 
-    tvm.s_tir.analysis.verify_well_formed(mod)
+    assert tvm.s_tir.analysis.check_well_formed(mod) is None
 
 
 def test_block_match_tensor_defines_symbolic_variables():
@@ -89,12 +91,12 @@ def test_block_match_tensor_defines_symbolic_variables():
                     B = Ts.match_tensor(
                         A[tile_i * 16 : (tile_i + 1) * 16, tile_j * 16 : (tile_j + 1) * 16],
                         dtype="float32",
-                        elem_offset=elem_offset,
+                        layout=T.TileLayout(T.S[(16, 16) : (256, 1)] + elem_offset),
                     )
 
                     B[i, j] = elem_offset
 
-    tvm.s_tir.analysis.verify_well_formed(mod)
+    tvm.s_tir.analysis.check_well_formed(mod)
 
 
 def test_match_tensor_in_block_is_well_formed():
@@ -113,7 +115,7 @@ def test_match_tensor_in_block_is_well_formed():
                     )
                     A_tile[i, j] = A_tile[i, j] * 2.0
 
-    tvm.s_tir.analysis.verify_well_formed(mod)
+    tvm.s_tir.analysis.check_well_formed(mod)
 
 
 def test_error_undeclared_tensor_in_schedulable_tir():
@@ -121,13 +123,13 @@ def test_error_undeclared_tensor_in_schedulable_tir():
     # Manually construct a TensorStore that uses a tensor without any declaration
     # inside a block context.
     n = tvm_tirx.tirx.Var("n", "int32")
-    A = tvm_tirx.tirx.decl_tensor([n], "float32", name="A")
+    A = tvm_tirx.tirx.Var("A", tvm_tirx.tirx.TensorType([n], "float32"))
     i = tvm_tirx.tirx.Var("i", "int32")
 
     # Create an undeclared tensor using an explicit data pointer that is NOT
     # a function parameter and NOT wrapped with DeclTensor.
     B_data = tvm_tirx.tirx.Var("B_data", tvm_tirx.ir.PtrType(tvm_tirx.ir.PrimType("float32")))
-    B = tvm_tirx.tirx.decl_tensor([n], "float32", name="B", data=B_data)
+    B = tvm_tirx.tirx.Var("B", tvm_tirx.tirx.TensorType([n], "float32", data=B_data))
 
     # Build a block that writes to B without any declaration of B.
     bi = tvm_tirx.tirx.Var("bi", "int32")
@@ -135,24 +137,24 @@ def test_error_undeclared_tensor_in_schedulable_tir():
         iter_vars=[tvm.s_tir.IterVar(tvm_tirx.ir.Range(0, n), bi, 0)],  # 0 = kDataPar
         reads=[TensorRegion(A, [tvm_tirx.ir.Range(bi, bi + 1)], ty=TensorRegionType())],
         writes=[TensorRegion(B, [tvm_tirx.ir.Range(bi, bi + 1)], ty=TensorRegionType())],
-        body=tvm_tirx.ir.TensorStore(B, [bi], tvm_tirx.tirx.TensorLoad(A, [bi])),
+        body=tvm_tirx.ir.TensorStore(B, [bi], tvm_tirx.ir.TensorLoad(A, [bi])),
         name_hint="write_B",
     )
     block_realize = tvm.s_tir.SBlockRealize(
         iter_values=[i],
-        predicate=tvm_tirx.tirx.const(True),
+        predicate=tvm_tirx.tirx.const(True, "bool"),
         block=block,
     )
 
     function = tvm_tirx.tirx.Function(
         params=[A, B_data],
-        body=tvm_tirx.ir.For(i, 0, n, tvm_tirx.ir.ForKind.DEFAULT, block_realize),
+        body=tvm_tirx.ir.For(
+            i, 0, n, tvm_tirx.ir.IntImm(i.ty, 1), tvm_tirx.ir.ForKind.DEFAULT, block_realize
+        ),
         # Note: B is NOT a function parameter, so its declaration scope is only
         # within a DeclTensor node (which we intentionally omit here).
     )
 
     # B is used in the block but was never declared — should fail.
-    with pytest.raises(
-        (ValueError, tvm_tirx.error.InternalError), match="tensor B.*without a prior DeclTensor"
-    ):
-        tvm.s_tir.analysis.verify_well_formed(function)
+    with pytest.raises((ValueError, RuntimeError), match="tensor B.*without a prior DeclTensor"):
+        tvm.s_tir.analysis.check_well_formed(function)

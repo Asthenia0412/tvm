@@ -21,6 +21,7 @@ import tempfile
 
 import numpy as np
 import pytest
+import tvm_ffi
 
 import tvm
 import tvm_tirx
@@ -29,12 +30,12 @@ from tvm import relax
 from tvm.relax.transform.legalize_ops import adreno as legalize_adreno
 from tvm.rpc import connect_tracker
 from tvm.s_tir import script as Ts
-from tvm_tirx import DataType, IRModule, tirx
+from tvm.testing import env as tvm_env
+from tvm_tirx import IRModule, tirx
 from tvm_tirx.script import ir as I
 from tvm_tirx.script import tirx as T
 from tvm_tirx.support import ndk
 from tvm_tirx.target import Target
-from tvm_tirx.testing import env
 
 
 def get_rpc():
@@ -104,9 +105,9 @@ def postprocess_pipeline(mod: IRModule) -> IRModule:
     return mod
 
 
-@pytest.mark.skipif(not env.build_flag_enabled("USE_RPC"), reason="need rpc")
+@pytest.mark.skipif(not tvm_env.build_flag_enabled("USE_RPC"), reason="need rpc")
 @pytest.mark.gpu
-@pytest.mark.skipif(not env.has_adreno_opencl(), reason="need adreno opencl")
+@pytest.mark.skipif(not tvm_env.has_adreno_opencl(), reason="need adreno opencl")
 @pytest.mark.parametrize("backend", ["opencl"])
 @pytest.mark.parametrize("dtype", ["int8", "float16", "int16", "float32", "int32"])
 @pytest.mark.parametrize("channel_size", [64, 128])
@@ -114,7 +115,7 @@ def postprocess_pipeline(mod: IRModule) -> IRModule:
 def test_texture_copy(backend, dtype, channel_size, read_width):
     remote = get_rpc()
     M, N, K = (256, 1024, 128)
-    lanes = channel_size // DataType(dtype).bits
+    lanes = channel_size // tvm_ffi.dtype(dtype).bits
     if read_width > lanes:
         return
 

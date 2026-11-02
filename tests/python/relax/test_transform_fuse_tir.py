@@ -17,6 +17,8 @@
 
 from __future__ import annotations
 
+import tvm_ffi
+
 import tvm
 import tvm_tirx
 import tvm_tirx.testing
@@ -516,8 +518,8 @@ def test_fuse_return_partial_result():
             rhs = tvm_tirx.tirx.Select((x[1] >= y[1]), x[1], y[1])
             return lhs, rhs
 
-        def f_identity(dtype0: tvm_tirx.DataType, dtype1: tvm_tirx.DataType):
-            return tvm_tirx.tirx.const(-1, dtype0), tvm.te.min_value(dtype1)
+        def f_identity(dtype0: tvm_ffi.dtype, dtype1: tvm_ffi.dtype):
+            return tvm_tirx.tirx.const(-1, dtype0), tvm.te.min_value(ty=dtype1)
 
         argmax = te.comm_reducer(f_combine, f_identity, name="argmax")
         m, n = val.shape
@@ -2439,8 +2441,8 @@ def test_primitive_scalar_parameter_preserves_identity():
             return out
 
     after = relax.transform.FuseTIR()(Before)
-    assert relax.analysis.check_well_formed(after)
-    assert tvm.s_tir.analysis.verify_well_formed(after["fused"])
+    relax.analysis.check_well_formed(after)
+    tvm.s_tir.analysis.check_well_formed(after["fused"])
 
 
 def test_inplace_argument_after_primitive_scalar():
@@ -2472,8 +2474,8 @@ def test_inplace_argument_after_primitive_scalar():
             return out
 
     after = relax.transform.FuseTIR()(Before)
-    assert relax.analysis.check_well_formed(after)
-    assert tvm.s_tir.analysis.verify_well_formed(after["fused"])
+    relax.analysis.check_well_formed(after)
+    tvm.s_tir.analysis.check_well_formed(after["fused"])
 
 
 if __name__ == "__main__":

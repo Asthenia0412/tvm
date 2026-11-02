@@ -22,12 +22,14 @@ import threading
 
 import numpy as np
 import pytest
+import tvm_ffi
 
 import tvm
 import tvm_tirx
 import tvm_tirx.testing
 from tvm import rpc, te
 from tvm.contrib import random
+from tvm.testing import device_enabled
 
 
 def test_randint():
@@ -37,10 +39,10 @@ def test_randint():
     A = random.randint(-127, 128, size=(m, n), dtype="int32")
 
     def verify(target="llvm"):
-        if not tvm_tirx.testing.device_enabled(target):
+        if not device_enabled(target):
             print(f"skip because {target} is not enabled...")
             return
-        if not tvm_tirx.get_global_func("tvm.contrib.random.randint", True):
+        if not tvm_ffi.get_global_func("tvm.contrib.random.randint", True):
             print("skip because extern function is not available")
             return
         dev = tvm_tirx.cpu(0)
@@ -62,10 +64,10 @@ def test_uniform():
     A = random.uniform(0, 1, size=(m, n))
 
     def verify(target="llvm"):
-        if not tvm_tirx.testing.device_enabled(target):
+        if not device_enabled(target):
             print(f"skip because {target} is not enabled...")
             return
-        if not tvm_tirx.get_global_func("tvm.contrib.random.uniform", True):
+        if not tvm_ffi.get_global_func("tvm.contrib.random.uniform", True):
             print("skip because extern function is not available")
             return
         dev = tvm_tirx.cpu(0)
@@ -87,10 +89,10 @@ def test_normal():
     A = random.normal(3, 4, size=(m, n))
 
     def verify(target="llvm"):
-        if not tvm_tirx.testing.device_enabled(target):
+        if not device_enabled(target):
             print(f"skip because {target} is not enabled...")
             return
-        if not tvm_tirx.get_global_func("tvm.contrib.random.normal", True):
+        if not tvm_ffi.get_global_func("tvm.contrib.random.normal", True):
             print("skip because extern function is not available")
             return
         dev = tvm_tirx.cpu(0)
@@ -122,18 +124,18 @@ def test_normal():
 )
 def test_random_fill(target):
     """Tests random_fill function"""
-    if not tvm_tirx.testing.device_enabled(target):
-        pytest.skip("target is unavailable or excluded by TVM_TEST_TARGETS")
-    if not tvm_tirx.get_global_func("tvm.contrib.random.random_fill", True):
+    if not device_enabled(target):
+        pytest.skip("target is unavailable")
+    if not tvm_ffi.get_global_func("tvm.contrib.random.random_fill", True):
         pytest.skip("random_fill is not built")
     dev = tvm_tirx.device_from_target(target)
 
     def test_local(dev, dtype):
-        if not tvm_tirx.get_global_func("tvm.contrib.random.random_fill", True):
+        if not tvm_ffi.get_global_func("tvm.contrib.random.random_fill", True):
             print("skip because extern function is not available")
             return
         value = tvm_tirx.runtime.empty((512, 512), dtype, dev)
-        random_fill = tvm_tirx.get_global_func("tvm.contrib.random.random_fill")
+        random_fill = tvm_ffi.get_global_func("tvm.contrib.random.random_fill")
         random_fill(value)
 
         assert np.count_nonzero(value.numpy()) == 512 * 512
@@ -143,10 +145,10 @@ def test_random_fill(target):
         assert np.isfinite(np_values * np_values + np_values).any()
 
     def test_rpc(dtype):
-        if not tvm_tirx.get_global_func("tvm.contrib.random.random_fill", True):
+        if not tvm_ffi.get_global_func("tvm.contrib.random.random_fill", True):
             print("skip because extern function is not available")
             return
-        if not tvm_tirx.testing.device_enabled("rpc") or not tvm_tirx.runtime.enabled("llvm"):
+        if not device_enabled("rpc") or not tvm_tirx.runtime.enabled("llvm"):
             return
 
         def check_remote(server):
@@ -195,11 +197,11 @@ def test_random_fill_mt():
     def test_body():
         try:
             num_thread_used = 1
-            configure_threads = tvm_tirx.get_global_func("runtime.config_threadpool")
+            configure_threads = tvm_ffi.get_global_func("runtime.config_threadpool")
             configure_threads(1, num_thread_used)
 
             test_input = tvm_tirx.runtime.empty((10, 10))
-            random_fill = tvm_tirx.get_global_func("tvm.contrib.random.random_fill_for_measure")
+            random_fill = tvm_ffi.get_global_func("tvm.contrib.random.random_fill_for_measure")
             random_fill(test_input)
         except:  # pylint: disable=bare-except
             nonlocal no_exception_happened

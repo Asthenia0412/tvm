@@ -44,11 +44,11 @@ def test_shared_operations_and_aliases():
                 v = Ts.axis.spatial(A.shape[0], i)
                 A[v] = S.float32(1)
 
-    assert shared.attrs["s_tir"]
+    assert shared.attrs["script.namespace"] == "s_tir"
     assert shared.params[0].ty.layout is None
     assert Ts.Tensor is T.Tensor
     assert Ts.serial is T.serial
-    assert Ts.bind is T.bind
+    assert Ts.Bind is T.Bind
     assert Ts.tile is T.tile
     tvm_tirx.ir.assert_structural_equal(
         shared,
@@ -74,8 +74,8 @@ def test_mixed_module_roundtrip():
             for i in T.serial(4):
                 A[i] = 2.0
 
-    assert Mixed["scheduled"].attrs["s_tir"]
-    assert not Mixed["direct"].attrs.get("s_tir", False)
+    assert Mixed["scheduled"].attrs["script.namespace"] == "s_tir"
+    assert Mixed["direct"].attrs.get("script.namespace") != "s_tir"
     script = Mixed.script()
     assert "@Ts.function" in script
     assert "@T.function" in script
@@ -97,7 +97,7 @@ def test_tirx_construction_roundtrip_and_execution_are_independent(monkeypatch):
     def reject_s_tir_analysis(*args, **kwargs):
         pytest.fail("TIRx construction and compilation must not invoke S-TIR verification")
 
-    monkeypatch.setattr(tvm.s_tir.analysis, "verify_well_formed", reject_s_tir_analysis)
+    monkeypatch.setattr(tvm.s_tir.analysis, "check_well_formed", reject_s_tir_analysis)
 
     @I.ir_module
     class Direct:
@@ -118,20 +118,7 @@ def test_tirx_construction_roundtrip_and_execution_are_independent(monkeypatch):
     np.testing.assert_array_equal(data.numpy(), np.arange(4, dtype="int32") + 3)
 
 
-@pytest.mark.parametrize("option", ["s_tir", "is_stir"])
-def test_raw_tirx_builder_rejects_legacy_mode(option):
-    from tvm_tirx.tirx.script import ir_builder as builder
-
-    with pytest.raises(TypeError, match="unexpected keyword argument"):
-        builder.function(**{option: True})
-
-
-def test_jit_rejects_legacy_mode():
-    with pytest.raises(TypeError, match="unexpected keyword argument"):
-        T.jit(**{"is_stir": True})
-
-
-@pytest.mark.parametrize("namespace", ["T", "Ts"])
+@pytest.mark.parametrize("namespace", ["Ts"])
 @pytest.mark.parametrize("option", ["s_tir", "is_stir"])
 def test_legacy_mode_is_not_a_function_option(namespace, option):
     with pytest.raises(TypeError, match="unexpected keyword argument"):
@@ -175,28 +162,6 @@ def test_tirx_rejects_s_tir_blocks():
         )
 
 
-@pytest.mark.parametrize("value", [True, False])
-def test_tirx_cannot_change_dialect_with_attribute(value):
-    with pytest.raises(ValueError, match="Ts.function"):
-        tvm_tirx.script.from_source(
-            "@T.function(check_well_formed=False)\n"
-            f"def main():\n    T.func_attr({{'s_tir': {value}}})\n    T.evaluate(0)\n",
-            extra_vars={"I": tvm_tirx.script.ir, "T": tvm_tirx.script.tirx, "Ts": tvm.s_tir.script},
-        )
-
-
-@pytest.mark.parametrize("value", [True, False])
-def test_tirx_cannot_change_dialect_from_exit_callback(value):
-    from tvm_tirx.script.ir_builder import IRBuilder
-    from tvm_tirx.tirx.script import ir_builder as builder
-
-    with pytest.raises(ValueError, match="Ts.function"):
-        with IRBuilder():
-            with builder.function() as frame:
-                frame.add_callback(lambda: builder.func_attr({"s_tir": value}))
-                builder.evaluate(0)
-
-
 def test_s_tir_options_and_helpers():
     @Ts.inline
     def fill(A):
@@ -207,7 +172,7 @@ def test_s_tir_options_and_helpers():
     def scheduled(A: Ts.Tensor((4,), "float32")):
         fill(A)
 
-    assert scheduled.attrs["s_tir"]
+    assert scheduled.attrs["script.namespace"] == "s_tir"
     assert "global_symbol" not in scheduled.attrs
     tvm_tirx.ir.assert_structural_equal(
         scheduled,

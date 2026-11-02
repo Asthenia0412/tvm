@@ -235,7 +235,7 @@ class Conv2dCacheRead:
         conv2d_nhwc_global = Ts.sblock_alloc_tensor([1, 56, 56, 64], dtype="float32")
         pad_temp_global = Ts.sblock_alloc_tensor([1, 58, 58, 64], dtype="float32")
         p1_global = Ts.sblock_alloc_tensor([3, 3, 64, 64], dtype="float32")
-        for i0_0_i1_0_i2_0_fused in T.parallel(4, annotations={"auto_unroll_max_step":16, "unroll_explicit":1}):
+        for i0_0_i1_0_i2_0_fused in T.parallel(4, annotations={"tirx.auto_unroll_max_step":16, "tirx.unroll_explicit":1}):
             for ax0, ax1, ax2 in T.grid(1, 30, 30):
                 for ax3_fused in T.vectorized(64):
                     with Ts.sblock("pad_temp"):
@@ -320,7 +320,7 @@ class Conv2dCacheReadRewritten:
                 Ts.writes(p1_global_1[v3 // 4, v2 // 32, v3 % 4 // 2, v0, v1, v2 % 32, v3 % 2])
                 Ts.sblock_attr({"meta_schedule.layout_rewrite_preproc":True})
                 p1_global_1[v3 // 4, v2 // 32, v3 % 4 // 2, v0, v1, v2 % 32, v3 % 2] = p1[v0, v1, v2, v3]
-        for i0_0_i1_0_i2_0_fused in T.parallel(4, annotations={"auto_unroll_max_step":16, "unroll_explicit":1}):
+        for i0_0_i1_0_i2_0_fused in T.parallel(4, annotations={"tirx.auto_unroll_max_step":16, "tirx.unroll_explicit":1}):
             for ax0, ax1, ax2 in T.grid(1, 30, 30):
                 for ax3_fused in T.vectorized(64):
                     with Ts.sblock("pad_temp"):
@@ -412,7 +412,7 @@ class Conv2dCacheReadMultipleRewritten:
                 Ts.reads(p1_global_1[v3 // 4, v2 // 32, v3 % 4 // 2, v0, v1, v2 % 32, v3 % 2])
                 Ts.writes(p1_global2[v3 // 4, v2 // 32, v3 % 4 // 2, v0, v1, v2 % 32, v3 % 2])
                 p1_global2[v3 // 4, v2 // 32, v3 % 4 // 2, v0, v1, v2 % 32, v3 % 2] = p1_global_1[v3 // 4, v2 // 32, v3 % 4 // 2, v0, v1, v2 % 32, v3 % 2]
-        for i0_0_i1_0_i2_0_fused in T.parallel(4, annotations={"auto_unroll_max_step":16, "unroll_explicit":1}):
+        for i0_0_i1_0_i2_0_fused in T.parallel(4, annotations={"tirx.auto_unroll_max_step":16, "tirx.unroll_explicit":1}):
             for ax0, ax1, ax2 in T.grid(1, 30, 30):
                 for ax3_fused in T.vectorized(64):
                     with Ts.sblock("pad_temp"):
@@ -559,8 +559,8 @@ def test_layout_rewrite_int64_index():
                             v_k = Ts.axis.reduce(T.int64(64), k_0 + k_1)
                             T_batch_matmul_NT[v_b, v_i, v_j] = T_batch_matmul_NT[
                                 v_b, v_i, v_j
-                            ] + T.Cast(p0[v_b, v_i, v_k], "int32") * T.Cast(
-                                p1[v_b, v_j, v_k], "int32"
+                            ] + T.Cast("int32", p0[v_b, v_i, v_k]) * T.Cast(
+                                "int32", p1[v_b, v_j, v_k]
                             )
 
     @Ts.function(private=True)
@@ -628,8 +628,8 @@ def test_layout_rewrite_int64_index():
                         v_k = Ts.axis.reduce(T.int64(64), k_0 + k_1)
                         T_batch_matmul_NT[v_b, v_i, v_j] = T_batch_matmul_NT[
                             v_b, v_i, v_j
-                        ] + T.Cast(p0[v_b, v_i, v_k], "int32") * T.Cast(
-                            p1_global[v_b // T.int64(6), v_k, v_b % T.int64(6), v_j], "int32"
+                        ] + T.Cast("int32", p0[v_b, v_i, v_k]) * T.Cast(
+                            "int32", p1_global[v_b // T.int64(6), v_k, v_b % T.int64(6), v_j]
                         )
 
     mod = tvm_tirx.IRModule.from_expr(before)

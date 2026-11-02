@@ -373,8 +373,11 @@ def test_access_of_padding_pattern():
         assert region.source == expect.source
         analyzer = tvm_tirx.sym.Analyzer()
         for observed_range, expected_range in zip(region.region, expect.region):
-            analyzer.can_prove_equal(observed_range.min, expected_range.min)
-            analyzer.can_prove_equal(observed_range.extent, expected_range.extent)
+            analyzer.can_prove_equal(observed_range.begin, expected_range.begin)
+            analyzer.can_prove_equal(
+                observed_range.extent,
+                expected_range.extent,
+            )
 
     def do_check_block(block_name):
         block = s.get_sref(s.get_sblock(block_name)).stmt
@@ -471,7 +474,7 @@ def test_conditional_inequality_access_regions(case):
     tirx = tvm_tirx.tirx
     x, y, z = [tirx.Var(name, "int32") for name in ("x", "y", "z")]
     free_var = tirx.Var("free_var", "int32")
-    unbounded_extent = tirx.Cast(1 + tirx.log(free_var), "int32")
+    unbounded_extent = tirx.Cast("int32", 1 + tirx.log(free_var))
     cases = {
         "coupled": (
             [x, y],
@@ -501,8 +504,8 @@ def test_conditional_inequality_access_regions(case):
         "rounded": ([x], [(-20, 41)], tirx.all(x * 3 >= -7, x * 2 <= 9), [(-2, 7)]),
     }
     variables, domains, condition, expected = cases[case]
-    inside = tirx.decl_tensor([256] * len(variables), name="inside")
-    outside = tirx.decl_tensor([256] * len(variables), name="outside")
+    inside = tirx.Var("inside", tirx.TensorType([256] * len(variables), "float32"))
+    outside = tirx.Var("outside", tirx.TensorType([256] * len(variables), "float32"))
     body = tvm_tirx.ir.SeqStmt(
         [
             tvm_tirx.ir.If(condition, tvm_tirx.ir.Evaluate(inside[tuple(variables)]), None),
@@ -510,7 +513,14 @@ def test_conditional_inequality_access_regions(case):
         ]
     )
     for var, (minimum, extent) in reversed(list(zip(variables, domains))):
-        body = tvm_tirx.ir.For(var, minimum, extent, tvm_tirx.ir.ForKind.DEFAULT, body)
+        body = tvm_tirx.ir.For(
+            var,
+            minimum,
+            minimum + extent,
+            tvm_tirx.ir.IntImm(var.ty, 1),
+            tvm_tirx.ir.ForKind.DEFAULT,
+            body,
+        )
     block = s_tir.SBlock([], [], [], "conditional", body)
     # Unbounded access sets conservatively cover the whole tensor.
     outside_expected = [(0, 256)] if case == "unbounded" else domains

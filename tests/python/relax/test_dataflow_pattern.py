@@ -1518,9 +1518,12 @@ def test_repeated_pattern_match():
     tvm_tirx.ir.assert_structural_equal(after, expected)
 
 
-bind_to_dataflow_var = tvm_tirx.testing.parameter(
-    by_dict={"var-to-var": False, "var-to-dataflow-var": True}
+@pytest.fixture(
+    params=[pytest.param(False, id="var-to-var"), pytest.param(True, id="var-to-dataflow-var")],
+    scope="session",
 )
+def bind_to_dataflow_var(request):
+    return request.param
 
 
 def test_rewrite_without_trivial_binding(bind_to_dataflow_var):
@@ -1580,12 +1583,17 @@ def test_rewrite_without_trivial_binding(bind_to_dataflow_var):
     tvm_tirx.ir.assert_structural_equal(after, expected)
 
 
-same_shape_func_type = tvm_tirx.testing.parameter(
-    "same_static_shape",
-    "same_dynamic_shape",
-    "different_static_shape",
-    "different_dynamic_shape",
+@pytest.fixture(
+    params=[
+        "same_static_shape",
+        "same_dynamic_shape",
+        "different_static_shape",
+        "different_dynamic_shape",
+    ],
+    scope="session",
 )
+def same_shape_func_type(request):
+    return request.param
 
 
 def test_same_shape_pattern(same_shape_func_type):
@@ -1720,17 +1728,17 @@ def test_iterative_rewrite_without_trivial_binding():
         end = end[0]
         stride = strides[0]
 
-        if not isinstance(axis, tirx.IntImm) or axis.value != 0:
+        if not isinstance(axis, tvm_tirx.ir.IntImm) or axis.value != 0:
             return expr
 
-        if not isinstance(stride, tirx.IntImm) or stride.value != 1:
+        if not isinstance(stride, tvm_tirx.ir.IntImm) or stride.value != 1:
             return expr
 
         size = arg.ty.shape[0]
         if (
-            isinstance(size, tirx.IntImm)
-            and isinstance(begin, tirx.IntImm)
-            and isinstance(end, tirx.IntImm)
+            isinstance(size, tvm_tirx.ir.IntImm)
+            and isinstance(begin, tvm_tirx.ir.IntImm)
+            and isinstance(end, tvm_tirx.ir.IntImm)
         ):
             size = size.value
             begin = begin.value

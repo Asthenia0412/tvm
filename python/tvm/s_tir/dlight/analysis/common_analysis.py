@@ -28,10 +28,10 @@ from tvm_ffi import get_global_func
 
 import tvm_tirx
 from tvm import s_tir
-from tvm.s_tir import Schedule
+from tvm.s_tir import Schedule, match_shape_stride_pattern
 from tvm.s_tir.schedule import SBlockRV
 from tvm_tirx import ir, tirx
-from tvm_tirx.ir import TensorRegion
+from tvm_tirx.ir import Range, TensorRegion
 from tvm_tirx.runtime import MemoryScope
 from tvm_tirx.target.target import Target
 
@@ -62,7 +62,7 @@ class IterInfo:
     @property
     def dom(self) -> int | tirx.Expr:
         """The iteration domain of the loop."""
-        return int(self._dom) if isinstance(self._dom, tirx.IntImm) else self._dom
+        return int(self._dom) if isinstance(self._dom, tvm_tirx.ir.IntImm) else self._dom
 
     def __str__(self) -> str:
         return f'Iter("{self.kind}", {self.dom})'
@@ -101,20 +101,20 @@ class TensorInfo:
         loops = [sch.get(lp) for lp in lps]
         iter_vars = [Var.var for Var in block.iter_vars]
         iter_values = get_sblockrealize(sch, block_rv).iter_values
-        lpvar_lp = dict([loop.loop_var, lp] for loop, lp in zip(loops, lps))
+        lpvar_lp = dict([loop.var, lp] for loop, lp in zip(loops, lps))
         var_lp = dict(zip(iter_vars, [lpvar_lp.get(val, None) for val in iter_values]))
 
         def extract_index_types(tensor: TensorRegion) -> TensorIndex:
             tensor_index = []
             for expr in tensor.region:
-                expr = expr.min
+                expr = expr.begin
                 dim = None
                 if isinstance(expr, tirx.expr.Add) and ir.is_prim_var(expr.b):
                     var_add = expr.b
                     if (
                         isinstance(expr, tirx.expr.Mul)
                         and ir.is_prim_var(expr.a)
-                        and isinstance(expr.b, tirx.expr.IntImm)
+                        and isinstance(expr.b, tvm_tirx.ir.IntImm)
                     ):
                         mul = expr.b
                         var_mul = expr.a
@@ -122,13 +122,13 @@ class TensorInfo:
                 elif (
                     isinstance(expr, tirx.expr.FloorMod)
                     and ir.is_prim_var(expr.a)
-                    and isinstance(expr.b, tirx.expr.IntImm)
+                    and isinstance(expr.b, tvm_tirx.ir.IntImm)
                 ):
                     dim = RemIndex(expr.a, expr.b)
                 elif (
                     isinstance(expr, tirx.expr.FloorDiv)
                     and ir.is_prim_var(expr.a)
-                    and isinstance(expr.b, tirx.expr.IntImm)
+                    and isinstance(expr.b, tvm_tirx.ir.IntImm)
                 ):
                     dim = DivIndex(expr.a, expr.b)
                 elif ir.is_prim_var(expr):
@@ -158,8 +158,17 @@ class TensorInfo:
         if self.assoc_lps_info[-1] is None:
             return None
 
-        vlp_extent = int(self.assoc_lps_info[-1].extent) & ~(
-            int(self.assoc_lps_info[-1].extent) - 1
+        vlp_extent = int(
+            Range.get_extent_from_begin_end(
+                self.assoc_lps_info[-1].begin, self.assoc_lps_info[-1].end
+            )
+        ) & ~(
+            int(
+                Range.get_extent_from_begin_end(
+                    self.assoc_lps_info[-1].begin, self.assoc_lps_info[-1].end
+                )
+            )
+            - 1
         )
         vtensor_extent = int(self.shape[-1]) & ~(int(self.shape[-1]) - 1)
 
@@ -219,7 +228,7 @@ class SBlockInfo:
         """Whether the SBlock is elementwise, i.e. trivial mapping between read/write region"""
 
         def _check_unit_var_range(dom: ir.Range, var: tirx.Var) -> bool:
-            return dom.min.same_as(var) and dom.extent == 1
+            return dom.begin.same_as(var) and dom.extent == 1
 
         if not self.is_injective():
             return False
@@ -414,7 +423,7 @@ def collect_block_iter_vars_used_in_access_region(
     tir_vars = set()
     for expr in region:
         assert expr.extent == 1
-        tir_vars |= collect_vars_used_in_prim_expr(expr.min)
+        tir_vars |= collect_vars_used_in_prim_expr(expr.begin)
     tir_vars &= set(iter_var.var for iter_var in block.iter_vars)
     return tir_vars
 
@@ -446,14 +455,11 @@ def detect_dominant_read(block: s_tir.SBlock) -> tirx.Expr:
 def _tensor_region_offset(region):
     """Linear element offset of a region's first element."""
     tensor = region.source
-    offset = 0
+    pattern = match_shape_stride_pattern(tensor.ty)
+    assert pattern is not None
+    offset = pattern.elem_offset
     for axis, bounds in enumerate(region.region):
-        if tensor.strides:
-            offset += bounds.min * tensor.strides[axis]
-        else:
-            offset = offset * tensor.shape[axis] + bounds.min
-    if not (isinstance(tensor.elem_offset, tirx.IntImm) and tensor.elem_offset.value == 0):
-        offset += tensor.elem_offset
+        offset += bounds.begin * pattern.strides[axis]
     return tvm_tirx.sym.Analyzer().simplify(offset)
 
 

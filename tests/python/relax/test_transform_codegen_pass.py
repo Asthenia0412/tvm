@@ -21,6 +21,7 @@ import tempfile
 
 import numpy as np
 import pytest
+import tvm_ffi
 
 import tvm
 import tvm_tirx
@@ -37,8 +38,8 @@ from tvm_tirx.script import tirx as T
 from tvm_tirx.support import utils
 from tvm_tirx.testing import env
 
-env_checker_codegen = tvm_tirx.get_global_func("relax.ext.tensorrt", True)
-env_checker_runtime = tvm_tirx.get_global_func("relax.is_tensorrt_runtime_enabled", True)
+env_checker_codegen = tvm_ffi.get_global_func("relax.ext.tensorrt", True)
+env_checker_runtime = tvm_ffi.get_global_func("relax.is_tensorrt_runtime_enabled", True)
 
 requires_tensorrt_codegen = pytest.mark.skipif(
     not env_checker_codegen,
@@ -69,7 +70,7 @@ def check_executable(exec, dev, inputs, expected, entry_func_name):
 
 def check_roundtrip(exec0, reference_exec, input_arrays, entry_func_name="main"):
     with utils.tempdir() as temp:
-        exec0.mod.export_library(temp.relpath("exec.so"))
+        exec0.export_library(temp.relpath("exec.so"))
         exec1 = tvm_tirx.runtime.load_module(temp.relpath("exec.so"))
     assert exec0.stats() == exec1["stats"]()
     assert exec0.as_text() == exec1["as_text"]()
@@ -93,7 +94,7 @@ def gen_ground_truth(mod, target):
             [relax.transform.LegalizeOps(), s_tir.transform.DefaultGPUSchedule()]
         )
         new_mod = seq(mod)
-    relax.analysis.well_formed(new_mod)
+    relax.analysis.check_well_formed(new_mod)
     return tvm.compile(new_mod, target, params={})
 
 
@@ -129,7 +130,9 @@ def setup_test():
     return mod, inputs, reference_exec
 
 
-entry_func_name = tvm_tirx.testing.parameter("main", "func")
+@pytest.fixture(params=["main", "func"], scope="session")
+def entry_func_name(request):
+    return request.param
 
 
 @pytest.mark.gpu
@@ -191,7 +194,7 @@ def test_mix_use_tensorrt_and_tvm():
                     relax.transform.MetaScheduleApplyDatabase(work_dir),
                 ]
             )(mod)
-    relax.analysis.well_formed(new_mod)
+    relax.analysis.check_well_formed(new_mod)
     with transform.PassContext(opt_level=0):
         ex0 = tvm.compile(new_mod, target, params={})
 

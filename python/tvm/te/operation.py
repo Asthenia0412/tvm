@@ -21,6 +21,7 @@ import inspect
 # pylint: disable=invalid-name
 from numbers import Integral as _Integral
 
+import tvm_ffi
 from tvm_ffi import Array
 
 import tvm
@@ -29,7 +30,6 @@ import tvm_tirx.tirx
 import tvm_tirx.tirx._ffi_api
 from tvm_tirx.ir import is_prim_expr
 from tvm_tirx.ir.location import UNKNOWN_LOC, Location
-from tvm_tirx.runtime import convert
 
 from . import _ffi_api
 from . import tag as _tag
@@ -135,7 +135,7 @@ def compute(shape, fcompute, name="compute", tag="", attrs=None, varargs_names=N
 
     if not isinstance(body, list | tuple):
         body = [body]
-    body = convert(body)
+    body = tvm_ffi.convert(body)
     op_node = _ffi_api.ComputeOp(name, tag, attrs, dim_var, body)
 
     num = op_node.num_outputs
@@ -312,12 +312,16 @@ def extern(
             raise ValueError("expect inputs to be tensor")
         if in_tensors is None:
             input_placeholders.append(
-                tvm_tirx.tirx.decl_tensor(
-                    t.shape,
-                    t.dtype,
+                tvm_tirx.tirx.Var(
                     t.op.name,
-                    elem_offset=tvm_tirx.tirx.Var("elem_offset", "int32"),
-                    layout=None,
+                    tvm_tirx.tirx.TensorType(
+                        t.shape,
+                        t.dtype,
+                        layout=tvm_tirx.tirx.TileLayout(
+                            tvm_tirx.tirx.layout.S[tuple(t.shape)]
+                            + tvm_tirx.tirx.Var("elem_offset", "int32")
+                        ),
+                    ),
                 )
             )
         types.add(t.dtype)
@@ -333,12 +337,16 @@ def extern(
 
         for shp, dt in zip(shape, dtype):
             output_placeholders.append(
-                tvm_tirx.tirx.decl_tensor(
-                    shp,
-                    dt,
+                tvm_tirx.tirx.Var(
                     name,
-                    elem_offset=tvm_tirx.tirx.Var("elem_offset", "int32"),
-                    layout=None,
+                    tvm_tirx.tirx.TensorType(
+                        shp,
+                        "float32" if dt is None else dt,
+                        layout=tvm_tirx.tirx.TileLayout(
+                            tvm_tirx.tirx.layout.S[tuple(shp)]
+                            + tvm_tirx.tirx.Var("elem_offset", "int32")
+                        ),
+                    ),
                 )
             )
     body = fcompute(input_placeholders, output_placeholders)

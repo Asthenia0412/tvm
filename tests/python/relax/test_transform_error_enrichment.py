@@ -93,15 +93,36 @@ def test_error_without_resolvable_node_is_not_masked():
     class ThrowUnresolvable:
         def transform_module(self, mod, ctx):
             # A bare error with no VisitErrorContext payload -> nothing to resolve.
-            raise tvm_tirx.error.InternalError("deliberate failure with no resolvable location")
+            raise RuntimeError("deliberate failure with no resolvable location")
 
     mod = _bad_matmul_module()
-    with pytest.raises(tvm_tirx.error.InternalError) as excinfo:
+    with pytest.raises(RuntimeError) as excinfo:
         ThrowUnresolvable()(mod)
     msg = str(excinfo.value)
     assert "deliberate failure with no resolvable location" in msg
     # No context => no location block appended, but also no crash.
     assert "Location (TVMScript):" not in msg
+
+
+@pytest.mark.skip_well_formed_check_before_transform
+@pytest.mark.skip_well_formed_check_after_transform
+def test_well_formed_check_propagates_through_pass():
+    x = relax.Var("x", relax.TensorType([4], "float32"))
+    undefined = relax.Var("undefined", x.ty)
+    body = relax.SeqExpr([], undefined)
+    func = relax.Function([x], body, ret_ty=x.ty).with_attr("global_symbol", "main")
+    mod = IRModule({relax.GlobalVar("main"): func})
+
+    @tvm_tirx.ir.transform.module_pass(opt_level=0, name="CheckWellFormed")
+    def check(mod, ctx):
+        relax.analysis.check_well_formed(mod)
+        return mod
+
+    with pytest.raises(ValueError, match="undefined"):
+        relax.analysis.check_well_formed(mod)
+    with pytest.raises(ValueError, match="undefined") as error:
+        check(mod)
+    assert "Error in pass: CheckWellFormed" in str(error.value)
 
 
 if __name__ == "__main__":

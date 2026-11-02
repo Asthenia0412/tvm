@@ -1432,7 +1432,7 @@ def test_call_tir_out_ty_follows_arguments_when_match_cast_is_kept():
             for i in T.serial(8):
                 with Ts.sblock("b"):
                     vi = Ts.axis.spatial(8, i)
-                    y[0, vi] = x[0, vi] + T.Cast(s, "float16")
+                    y[0, vi] = x[0, vi] + T.Cast("float16", s)
 
         @R.function
         def main(x: R.Tensor((1, 12, 2, 12, 2, 8), "float16"), w: R.Tensor((1, 8), "float16")):
@@ -1468,7 +1468,7 @@ def test_call_tir_out_ty_follows_arguments_when_match_cast_is_kept():
     expected_vdevice = Before["main"].body.blocks[0].bindings[1].value.ty_args[0].fields[0].vdevice
     for output in (transposed, extra):
         tvm_tirx.ir.assert_structural_equal(output.vdevice, expected_vdevice)
-    relax.analysis.well_formed(after)
+    relax.analysis.check_well_formed(after)
 
 
 def test_call_tir_out_ty_follows_arguments_through_chained_match_casts():
@@ -1491,7 +1491,7 @@ def test_call_tir_out_ty_follows_arguments_through_chained_match_casts():
             for i in T.serial(8):
                 with Ts.sblock("b"):
                     vi = Ts.axis.spatial(8, i)
-                    y[0, vi] = x[0, vi] + T.Cast(s, "float16")
+                    y[0, vi] = x[0, vi] + T.Cast("float16", s)
 
         @R.function
         def main(x: R.Tensor((n, 8), "float16"), w: R.Tensor((1, 8), "float16")):
@@ -1512,4 +1512,4 @@ def test_call_tir_out_ty_follows_arguments_through_chained_match_casts():
             # Rebuilding the call re-runs the validator, so this passes only when the
             # out_ty agrees with the argument types.
             relax.Call(value.op, value.args, value.attrs, value.ty_args)
-    relax.analysis.well_formed(after)
+    relax.analysis.check_well_formed(after)

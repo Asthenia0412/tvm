@@ -29,7 +29,6 @@ import tvm_tirx
 from tvm_tirx.ir import make_node
 from tvm_tirx.ir.base import Node
 from tvm_tirx.ir.op import Op
-from tvm_tirx.runtime import Object
 
 from ..expr import Expr, Var
 from . import _ffi as ffi
@@ -106,13 +105,13 @@ class DFPattern(Node):
         """
         return reject(self)
 
-    def has_attr(self, attrs: dict[str, Object]) -> "AttrPattern":
+    def has_attr(self, attrs: dict[str, tvm_ffi.Object]) -> "AttrPattern":
         """
         Add an attribute constraint to this pattern
 
         Parameters
         ----------
-        attrs: Dict[str, Object]
+        attrs: Dict[str, tvm_ffi.Object]
 
         Returns
         -------
@@ -318,7 +317,7 @@ class VarPattern(DFPattern):
     ----------
     name_hint: str
         The name of the variable. Optional, if not provided,
-        the pattern will match any VarNode.
+        the pattern will match any VarObj.
     """
 
     def __init__(self, name_hint: str = ""):
@@ -333,7 +332,7 @@ class DataflowVarPattern(VarPattern):
     ----------
     name_hint: str
         The name of the variable. Optional, if not provided,
-        the pattern will match any VarNode.
+        the pattern will match any VarObj.
     """
 
     def __init__(self, name_hint: str = ""):
@@ -348,7 +347,7 @@ class GlobalVarPattern(DFPattern):
     ----------
     name_hint: str
         The name of the variable. Optional, if not provided,
-        the pattern will match any GlobalVarNode.
+        the pattern will match any GlobalVarObj.
     """
 
     def __init__(self, name_hint: str = ""):
@@ -363,7 +362,7 @@ class ExternFuncPattern(DFPattern):
     ----------
     global_symbol: str
         The name of the function. Optional, if not provided,
-        the pattern will match any ExternFuncNode.
+        the pattern will match any ExternFuncObj.
     """
 
     def __init__(self, global_symbol: str = ""):
@@ -976,7 +975,7 @@ def has_attr(attrs, pattern=None) -> AttrPattern:
 
     Parameters
     ----------
-    attrs: Dict[str, Object]
+    attrs: Dict[str, tvm_ffi.Object]
         The attributes to match
 
     pattern: Optional[tvm.relax.dpl.DFPattern]

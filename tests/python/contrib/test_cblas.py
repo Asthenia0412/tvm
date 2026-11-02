@@ -18,6 +18,7 @@
 
 import numpy as np
 import pytest
+import tvm_ffi
 
 pytest.importorskip("scipy")  # tvm.topi.testing imports scipy
 
@@ -27,6 +28,7 @@ import tvm_tirx
 import tvm_tirx.testing
 from tvm import te
 from tvm.contrib import cblas, dnnl, mkl
+from tvm.testing import device_enabled
 
 
 def verify_matmul_add(
@@ -58,10 +60,10 @@ def verify_matmul_add(
         return f
 
     def verify(target="llvm"):
-        if not tvm_tirx.testing.device_enabled(target):
+        if not device_enabled(target):
             print(f"skip because {target} is not enabled...")
             return
-        if not tvm_tirx.get_global_func(lib.__name__ + ".matmul", True):
+        if not tvm_ffi.get_global_func(lib.__name__ + ".matmul", True):
             print("skip because extern function is not available")
             return
         dev = tvm_tirx.cpu(0)
@@ -125,7 +127,7 @@ def test_matmul_add():
 
 def verify_quantized_matmul_add(matrix_m, matrix_l, matrix_n, transa=False, transb=False):
     """Tests quantized matmul+add op"""
-    if not tvm_tirx.get_global_func("tvm.contrib.mkl.matmul_u8s8s32", True):
+    if not tvm_ffi.get_global_func("tvm.contrib.mkl.matmul_u8s8s32", True):
         pytest.skip("Quantized dense is supported only for MKL. TVM GPU CI uses openblas")
     data_dtype = "uint8"
     kernel_dtype = "int8"
@@ -148,10 +150,10 @@ def verify_quantized_matmul_add(matrix_m, matrix_l, matrix_n, transa=False, tran
         return np.dot(a, b) + matrix_bias
 
     def verify(target="llvm"):
-        if not tvm_tirx.testing.device_enabled(target):
+        if not device_enabled(target):
             print(f"skip because {target} is not enabled...")
             return
-        if not tvm_tirx.get_global_func("tvm.contrib.mkl.matmul_u8s8s32", True):
+        if not tvm_ffi.get_global_func("tvm.contrib.mkl.matmul_u8s8s32", True):
             print("skip because extern function is not available")
             return
         dev = tvm_tirx.cpu(0)
@@ -233,10 +235,10 @@ def verify_batch_matmul(
         return f
 
     def verify(target="llvm"):
-        if not tvm_tirx.testing.device_enabled(target):
+        if not device_enabled(target):
             print(f"skip because {target} is not enabled...")
             return
-        if not tvm_tirx.get_global_func(lib.__name__ + ".matmul", True):
+        if not tvm_ffi.get_global_func(lib.__name__ + ".matmul", True):
             print("skip because extern function is not available")
             return
         dev = tvm_tirx.cpu(0)

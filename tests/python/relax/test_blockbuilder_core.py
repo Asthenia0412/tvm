@@ -19,6 +19,7 @@
 
 # The test here do not depend on tvmscript to cover most basic features
 import pytest
+import tvm_ffi
 
 import tvm
 import tvm.contrib.cblas
@@ -37,7 +38,7 @@ from tvm_tirx.tirx.function import Function
 
 @pytest.fixture(scope="module")
 def register_nop():
-    @tvm_tirx.register_global_func("test.blockbuilder.nop")
+    @tvm_ffi.register_global_func("test.blockbuilder.nop")
     def nop():
         pass
 
@@ -544,8 +545,8 @@ def test_emit_te_prim_value():
     bb = rx.BlockBuilder()
     n, m = tirx.Var("n", "int64"), tirx.Var("m", "int64")
     x = rx.Var("x", R.Tensor([n, m], "float32"))
-    a_min = tirx.IntImm("int64", 0)
-    a_max = tirx.IntImm("int64", 6)
+    a_min = tvm_tirx.ir.IntImm("int64", 0)
+    a_max = tvm_tirx.ir.IntImm("int64", 6)
 
     with bb.function("rx_clip", [x]):
         out = bb.emit_te(topi.clip, x, a_min, a_max)
@@ -703,10 +704,10 @@ def test_finalize_public_private_name_conflict():
     bb = rx.BlockBuilder()
 
     def te_zero():
-        return topi.full((), "int64", tirx.IntImm("int64", 0))
+        return topi.full((), "int64", tvm_tirx.ir.IntImm("int64", 0))
 
     def te_one():
-        return topi.full((), "int64", tirx.IntImm("int64", 1))
+        return topi.full((), "int64", tvm_tirx.ir.IntImm("int64", 1))
 
     with bb.function("func", []):
         gv0 = bb.emit_te(te_zero, function_name_hint="func")
@@ -714,9 +715,10 @@ def test_finalize_public_private_name_conflict():
         bb.emit_func_output((gv0, gv1))
 
     mod = bb.get()
-    assert not rx.analysis.check_well_formed(mod)
+    with pytest.raises((ValueError, TypeError)):
+        rx.analysis.check_well_formed(mod)
     mod_final = bb.finalize()
-    rx.analysis.well_formed(mod_final)
+    rx.analysis.check_well_formed(mod_final)
 
     # relax function call
     bb = rx.BlockBuilder()
@@ -733,9 +735,10 @@ def test_finalize_public_private_name_conflict():
         bb.emit_func_output(gv0)
 
     mod = bb.get()
-    assert not rx.analysis.check_well_formed(mod)
+    with pytest.raises((ValueError, TypeError)):
+        rx.analysis.check_well_formed(mod)
     mod_final = bb.finalize()
-    rx.analysis.well_formed(mod_final)
+    rx.analysis.check_well_formed(mod_final)
 
 
 def test_emit_nested_seqexpr_in_binding_block():
@@ -845,7 +848,8 @@ def test_emit_ill_formed_nested_seqexpr_in_dataflow_block():
 
     output = bb.finalize()["func"]
 
-    assert not rx.analysis.check_well_formed(tvm_tirx.ir.IRModule.from_expr(output))
+    with pytest.raises((ValueError, TypeError)):
+        rx.analysis.check_well_formed(tvm_tirx.ir.IRModule.from_expr(output))
 
 
 def test_emit_well_formed_nested_seqexpr_in_dataflow_block():
@@ -882,7 +886,7 @@ def test_emit_well_formed_nested_seqexpr_in_dataflow_block():
 
     output = bb.finalize()["func"]
 
-    rx.analysis.well_formed(tvm_tirx.ir.IRModule.from_expr(output))
+    rx.analysis.check_well_formed(tvm_tirx.ir.IRModule.from_expr(output))
 
     @R.function(private=True)
     def expected() -> R.Tensor((), dtype="int64"):

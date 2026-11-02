@@ -331,7 +331,7 @@ def matmul(a: Tensor, b: Tensor, out_dtype: str | None = None, name: str = "matm
     b : Tensor
         The second input tensor.
 
-    out_dtype: Optional[str | DataType]
+    out_dtype: Optional[str | tvm_ffi.dtype]
         The data type of the matmul result.
         When it is not specified, the output dtype will be the same as input dtype.
 
@@ -627,7 +627,7 @@ def conv1d_transpose(
     out_layout : Optional[str]
         Layout of the output. If not specified, it is the same as data_layout
 
-    out_dtype : Optional[str | DataType]
+    out_dtype : Optional[str | tvm_ffi.dtype]
         Specifies the output data type for mixed precision conv2d.
 
     Returns
@@ -1546,7 +1546,7 @@ def full(
     result : Tensor
         The result tensor.
     """
-    if isinstance(fill_value, _tir.FloatImm | _tir.IntImm):
+    if isinstance(fill_value, tvm_tirx.ir.FloatImm | tvm_tirx.ir.IntImm):
         fill_value = rx.const(fill_value.value, dtype=dtype)
     elif isinstance(fill_value, int | float):
         fill_value = rx.const(fill_value, dtype=dtype)
@@ -2182,7 +2182,7 @@ def extern(
 ) -> OutType:
     """Invoke an extern function during runtime. The extern function must be registered with the "
     TVM runtime using `reflection::GlobalDef().def` (C++), or
-    `tvm_tirx.register_global_func` (Python).
+    `tvm_ffi.register_global_func` (Python).
 
     Parameters
     ----------
@@ -2206,9 +2206,9 @@ def extern(
         if isinstance(arg, Tensor):
             return arg._expr  # pylint: disable=protected-access
         if isinstance(arg, int):
-            return rx.prim_value(_tir.IntImm("int64", arg))
+            return rx.prim_value(tvm_tirx.ir.IntImm("int64", arg))
         if isinstance(arg, float):
-            return rx.prim_value(_tir.FloatImm("float64", arg))
+            return rx.prim_value(tvm_tirx.ir.FloatImm("float64", arg))
         if isinstance(arg, str):
             return tvm_tirx.ir.StringImm(arg)
         if tvm_tirx.ir.is_prim_expr(arg):
@@ -2239,7 +2239,7 @@ def debug_func(
 
     .. code-block:: python
 
-        @tvm_tirx.register_global_func(name_of_debug_func)
+        @tvm_ffi.register_global_func(name_of_debug_func)
         def debug_func(lineno: str, arg_0, arg_1, ...) -> None:
             ...
 
@@ -2272,9 +2272,9 @@ def debug_func(
         if isinstance(arg, Tensor):
             converted_args.append(arg._expr)  # pylint: disable=protected-access
         elif isinstance(arg, int):
-            converted_args.append(rx.prim_value(_tir.IntImm("int64", arg)))
+            converted_args.append(rx.prim_value(tvm_tirx.ir.IntImm("int64", arg)))
         elif isinstance(arg, float):
-            converted_args.append(rx.prim_value(_tir.FloatImm("float32", arg)))
+            converted_args.append(rx.prim_value(tvm_tirx.ir.FloatImm("float32", arg)))
         elif tvm_tirx.ir.is_prim_expr(arg):
             converted_args.append(rx.prim_value(arg))
         elif isinstance(arg, str):

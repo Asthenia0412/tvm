@@ -19,6 +19,7 @@
 
 from math import pi
 
+import tvm_tirx
 from tvm import te
 from tvm_tirx import ir, tirx
 from tvm_tirx.script.ir_builder import IRBuilder
@@ -94,12 +95,12 @@ def stft(
                     T.tensor_store(
                         output,
                         (batch, row, col, 0),
-                        tirx.Cast(0, data_ptr.dtype),
+                        tirx.Cast(data_ptr.dtype, 0),
                     )
                     T.tensor_store(
                         output,
                         (batch, row, col, 1),
-                        tirx.Cast(0, data_ptr.dtype),
+                        tirx.Cast(data_ptr.dtype, 0),
                     )
                     with T.serial(0, win_length) as wlen:
                         T.tensor_store(
@@ -139,7 +140,7 @@ def stft(
 
             return ib.get()
 
-    output_buf = tirx.decl_tensor(output_shape, data.dtype, "output_buf", layout=None)
+    output_buf = tirx.Var("output_buf", tirx.TensorType(output_shape, data.dtype, layout=None))
     loop_kind = "vectorize"
     if ir.is_prim_var(output_shape[2]):  # any_dim
         loop_kind = "serial"
@@ -160,7 +161,7 @@ def stft(
 def dft(
     re_data: te.Tensor,
     im_data: te.Tensor,
-    inverse: tirx.IntImm,
+    inverse: tvm_tirx.ir.IntImm,
 ):
     """
     Computes the discrete Fourier transform of input (calculation along the last axis).
@@ -214,19 +215,19 @@ def dft(
                     T.tensor_store(
                         re_output_ptr,
                         T.tensor_indices(re_output_ptr, n_idx),
-                        tirx.Cast(0, re_output_ptr.dtype),
+                        tirx.Cast(re_output_ptr.dtype, 0),
                     )
                     T.tensor_store(
                         im_output_ptr,
                         T.tensor_indices(im_output_ptr, n_idx),
-                        tirx.Cast(0, im_output_ptr.dtype),
+                        tirx.Cast(im_output_ptr.dtype, 0),
                     )
                     _w = sign * -2 * pi * n / n_fft
                     with T.serial(0, n_fft) as k:
                         k_idx = base_idx + k
                         w = _w * k
-                        cos_w = tirx.Cast(tirx.cos(w), re_output_ptr.dtype)
-                        sin_w = tirx.Cast(tirx.sin(w), re_output_ptr.dtype)
+                        cos_w = tirx.Cast(re_output_ptr.dtype, tirx.cos(w))
+                        sin_w = tirx.Cast(re_output_ptr.dtype, tirx.sin(w))
                         T.tensor_store(
                             re_output_ptr,
                             T.tensor_indices(re_output_ptr, n_idx),
@@ -250,13 +251,13 @@ def dft(
                         re_output_ptr,
                         T.tensor_indices(re_output_ptr, n_idx),
                         re_output_ptr[T.tensor_indices(re_output_ptr, n_idx)]
-                        * (tirx.Cast(factor, re_output_ptr.dtype)),
+                        * (tirx.Cast(re_output_ptr.dtype, factor)),
                     )
                     T.tensor_store(
                         im_output_ptr,
                         T.tensor_indices(im_output_ptr, n_idx),
                         im_output_ptr[T.tensor_indices(im_output_ptr, n_idx)]
-                        * (tirx.Cast(factor, im_output_ptr.dtype)),
+                        * (tirx.Cast(im_output_ptr.dtype, factor)),
                     )
 
             return ib.get()

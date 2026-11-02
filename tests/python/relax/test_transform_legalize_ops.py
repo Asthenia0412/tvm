@@ -289,12 +289,12 @@ def test_matmul_legalization_requires_known_dtype():
     assert err_message.startswith("To legalize R.matmul")
 
 
-emit_legalization_through_builder = tvm_tirx.testing.parameter(
-    by_dict={
-        "return_relax_expr": False,
-        "return_relax_var": True,
-    }
+@pytest.fixture(
+    params=[pytest.param(False, id="return_relax_expr"), pytest.param(True, id="return_relax_var")],
+    scope="session",
 )
+def emit_legalization_through_builder(request):
+    return request.param
 
 
 @pytest.fixture
@@ -330,6 +330,8 @@ def custom_op(emit_legalization_through_builder):
         "FPurity": True,
     }
 
+    if op_name not in tvm_tirx.ir.Op.list_op_names():
+        tvm_tirx.ir._ffi_api.RegisterOp(op_name, "Custom Relax test operator")
     for key, value in op_attrs.items():
         tvm_tirx.ir.register_op_attr(op_name, key, value)
 

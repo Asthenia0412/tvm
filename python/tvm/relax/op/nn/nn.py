@@ -19,14 +19,11 @@
 import tvm_ffi
 
 from tvm import relax
-from tvm_tirx import DataType
-from tvm_tirx.error import InternalError as _InternalError
-from tvm_tirx.ir import Attrs
+from tvm_tirx.ir import Attrs, FloatImm
 from tvm_tirx.ir import Call as _Call
 from tvm_tirx.ir import PrimType as _PrimType
 from tvm_tirx.ir.attrs import make_node as _make_attrs
 from tvm_tirx.ir.location import UNKNOWN_LOC, Location
-from tvm_tirx.tirx import FloatImm
 
 from ...expr import Expr
 
@@ -46,7 +43,7 @@ def conv1d(
     data_layout: str = "NCW",
     kernel_layout: str = "OIW",
     out_layout: str | None = None,
-    out_dtype: str | DataType | None = None,
+    out_dtype: str | tvm_ffi.dtype | None = None,
     *,
     ty_args=None,
     ty=None,
@@ -109,7 +106,7 @@ def conv1d(
     out_layout : Optional[str]
         Layout of the output. If not specified, it is the same as data_layout
 
-    out_dtype : Optional[Union[str, DataType]]
+    out_dtype : Optional[Union[str, tvm_ffi.dtype]]
         Specifies the output data type for mixed precision conv1d.
 
     Returns
@@ -127,13 +124,13 @@ def conv1d(
     if len(padding) == 1:
         padding = tuple(padding) + tuple(padding)
     if groups <= 0:
-        raise _InternalError("The number of groups must be positive")
+        raise RuntimeError("The number of groups must be positive")
     if len(strides) != 1:
-        raise _InternalError("strides must contain 1 values")
+        raise RuntimeError("strides must contain 1 values")
     if len(padding) != 2:
-        raise _InternalError("padding must contain 2 values")
+        raise RuntimeError("padding must contain 2 values")
     if len(dilation) != 1:
-        raise _InternalError("dilation must contain 1 values")
+        raise RuntimeError("dilation must contain 1 values")
     return _Call(
         "relax.nn.conv1d",
         [data, weight],
@@ -149,8 +146,8 @@ def conv1d(
             out_dtype=(out_dtype.dtype if isinstance(out_dtype, _PrimType) else out_dtype),
         ),
         ty_args=ty_args,
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -169,7 +166,7 @@ def conv2d(
     data_layout: str = "NCHW",
     kernel_layout: str = "OIHW",
     out_layout: str | None = None,
-    out_dtype: str | DataType | None = None,
+    out_dtype: str | tvm_ffi.dtype | None = None,
     *,
     ty_args=None,
     ty=None,
@@ -232,7 +229,7 @@ def conv2d(
     out_layout : Optional[str]
         Layout of the output. If not specified, it is the same as data_layout
 
-    out_dtype : Optional[Union[str, DataType]]
+    out_dtype : Optional[Union[str, tvm_ffi.dtype]]
         Specifies the output data type for mixed precision conv2d.
 
     Returns
@@ -254,13 +251,13 @@ def conv2d(
     if len(dilation) == 1:
         dilation = tuple(dilation) * 2
     if groups <= 0:
-        raise _InternalError("The number of groups must be positive")
+        raise RuntimeError("The number of groups must be positive")
     if len(strides) != 2:
-        raise _InternalError("strides must contain 2 values")
+        raise RuntimeError("strides must contain 2 values")
     if len(padding) != 4:
-        raise _InternalError("padding must contain 4 values")
+        raise RuntimeError("padding must contain 4 values")
     if len(dilation) != 2:
-        raise _InternalError("dilation must contain 2 values")
+        raise RuntimeError("dilation must contain 2 values")
     return _Call(
         "relax.nn.conv2d",
         [data, weight],
@@ -276,8 +273,8 @@ def conv2d(
             out_dtype=(out_dtype.dtype if isinstance(out_dtype, _PrimType) else out_dtype),
         ),
         ty_args=ty_args,
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -296,7 +293,7 @@ def conv3d(
     data_layout: str = "NCDHW",
     kernel_layout: str = "OIDHW",
     out_layout: str | None = None,
-    out_dtype: str | DataType | None = None,
+    out_dtype: str | tvm_ffi.dtype | None = None,
     *,
     ty_args=None,
     ty=None,
@@ -361,7 +358,7 @@ def conv3d(
     out_layout : Optional[str]
         Layout of the output. If not specified, it is the same as data_layout
 
-    out_dtype : Optional[Union[str, DataType]]
+    out_dtype : Optional[Union[str, tvm_ffi.dtype]]
         Specifies the output data type for mixed precision conv2d.
 
     See Also
@@ -387,13 +384,13 @@ def conv3d(
     if len(dilation) == 1:
         dilation = tuple(dilation) * 3
     if groups <= 0:
-        raise _InternalError("The number of groups must be positive")
+        raise RuntimeError("The number of groups must be positive")
     if len(strides) != 3:
-        raise _InternalError("strides must contain 3 values")
+        raise RuntimeError("strides must contain 3 values")
     if len(padding) != 6:
-        raise _InternalError("padding must contain 6 values")
+        raise RuntimeError("padding must contain 6 values")
     if len(dilation) != 3:
-        raise _InternalError("dilation must contain 3 values")
+        raise RuntimeError("dilation must contain 3 values")
     return _Call(
         "relax.nn.conv3d",
         [data, weight],
@@ -409,8 +406,8 @@ def conv3d(
             out_dtype=(out_dtype.dtype if isinstance(out_dtype, _PrimType) else out_dtype),
         ),
         ty_args=ty_args,
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -430,7 +427,7 @@ def conv1d_transpose(
     data_layout: str = "NCW",
     kernel_layout: str = "IOW",
     out_layout: str | None = None,
-    out_dtype: str | DataType | None = None,
+    out_dtype: str | tvm_ffi.dtype | None = None,
     *,
     ty_args=None,
     ty=None,
@@ -482,7 +479,7 @@ def conv1d_transpose(
     out_layout : Optional[str]
         Layout of the output. If not specified, it is the same as data_layout
 
-    out_dtype : Optional[Union[str, DataType]]
+    out_dtype : Optional[Union[str, tvm_ffi.dtype]]
         Specifies the output data type for mixed precision conv2d.
 
     Returns
@@ -502,15 +499,15 @@ def conv1d_transpose(
     if len(padding) == 1:
         padding = tuple(padding) + tuple(padding)
     if groups <= 0:
-        raise _InternalError("The number of groups must be positive")
+        raise RuntimeError("The number of groups must be positive")
     if len(strides) != 1:
-        raise _InternalError("strides must contain 1 values")
+        raise RuntimeError("strides must contain 1 values")
     if len(padding) != 2:
-        raise _InternalError("padding must contain 2 values")
+        raise RuntimeError("padding must contain 2 values")
     if len(dilation) != 1:
-        raise _InternalError("dilation must contain 1 values")
+        raise RuntimeError("dilation must contain 1 values")
     if len(output_padding) != 1:
-        raise _InternalError("output_padding must contain 1 values")
+        raise RuntimeError("output_padding must contain 1 values")
     return _Call(
         "relax.nn.conv1d_transpose",
         [data, weight],
@@ -527,8 +524,8 @@ def conv1d_transpose(
             out_dtype=(out_dtype.dtype if isinstance(out_dtype, _PrimType) else out_dtype),
         ),
         ty_args=ty_args,
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -548,7 +545,7 @@ def conv2d_transpose(
     data_layout: str = "NCHW",
     kernel_layout: str = "IOHW",
     out_layout: str | None = None,
-    out_dtype: str | DataType | None = None,
+    out_dtype: str | tvm_ffi.dtype | None = None,
     *,
     ty_args=None,
     ty=None,
@@ -610,7 +607,7 @@ def conv2d_transpose(
     out_layout : Optional[str]
         Layout of the output. If not specified, it is the same as data_layout
 
-    out_dtype : Optional[Union[str, DataType]]
+    out_dtype : Optional[Union[str, tvm_ffi.dtype]]
         Specifies the output data type for mixed precision conv2d.
 
     Returns
@@ -637,15 +634,15 @@ def conv2d_transpose(
     if len(output_padding) == 1:
         output_padding = tuple(output_padding) * 2
     if groups <= 0:
-        raise _InternalError("The number of groups must be positive")
+        raise RuntimeError("The number of groups must be positive")
     if len(strides) != 2:
-        raise _InternalError("strides must contain 2 values")
+        raise RuntimeError("strides must contain 2 values")
     if len(padding) != 4:
-        raise _InternalError("padding must contain 4 values")
+        raise RuntimeError("padding must contain 4 values")
     if len(dilation) != 2:
-        raise _InternalError("dilation must contain 2 values")
+        raise RuntimeError("dilation must contain 2 values")
     if len(output_padding) != 2:
-        raise _InternalError("output_padding must contain 2 values")
+        raise RuntimeError("output_padding must contain 2 values")
     return _Call(
         "relax.nn.conv2d_transpose",
         [data, weight],
@@ -662,8 +659,8 @@ def conv2d_transpose(
             out_dtype=(out_dtype.dtype if isinstance(out_dtype, _PrimType) else out_dtype),
         ),
         ty_args=ty_args,
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -683,7 +680,7 @@ def conv3d_transpose(
     data_layout: str = "NCDHW",
     kernel_layout: str = "IODHW",
     out_layout: str | None = None,
-    out_dtype: str | DataType | None = None,
+    out_dtype: str | tvm_ffi.dtype | None = None,
     *,
     ty_args=None,
     ty=None,
@@ -741,7 +738,7 @@ def conv3d_transpose(
     out_layout : Optional[str]
         Layout of the output. If not specified, it is the same as data_layout
 
-    out_dtype : Optional[Union[str, DataType]]
+    out_dtype : Optional[Union[str, tvm_ffi.dtype]]
         Specifies the output data type for mixed precision conv3d_transpose.
 
     See Also
@@ -773,15 +770,15 @@ def conv3d_transpose(
     if len(output_padding) == 1:
         output_padding = tuple(output_padding) * 3
     if groups <= 0:
-        raise _InternalError("The number of groups must be positive")
+        raise RuntimeError("The number of groups must be positive")
     if len(strides) != 3:
-        raise _InternalError("strides must contain 3 values")
+        raise RuntimeError("strides must contain 3 values")
     if len(padding) != 6:
-        raise _InternalError("padding must contain 6 values")
+        raise RuntimeError("padding must contain 6 values")
     if len(dilation) != 3:
-        raise _InternalError("dilation must contain 3 values")
+        raise RuntimeError("dilation must contain 3 values")
     if len(output_padding) != 3:
-        raise _InternalError("output_padding must contain 3 values")
+        raise RuntimeError("output_padding must contain 3 values")
     return _Call(
         "relax.nn.conv3d_transpose",
         [data, weight],
@@ -798,8 +795,8 @@ def conv3d_transpose(
             out_dtype=(out_dtype.dtype if isinstance(out_dtype, _PrimType) else out_dtype),
         ),
         ty_args=ty_args,
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -850,8 +847,8 @@ def pad(
         attrs=_make_attrs(
             "relax.attrs.PadAttrs", pad_width=pad_width, pad_mode=pad_mode, pad_value=pad_value
         ),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -894,8 +891,8 @@ def pixel_shuffle(data: Expr, upscale_factor: int, *, ty=None, loc: Location = U
         "relax.nn.pixel_shuffle",
         [data],
         attrs=_make_attrs("relax.attrs.PixelShuffleAttrs", upscale_factor=upscale_factor),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -978,13 +975,13 @@ def max_pool1d(
     if len(padding) == 1:
         padding = tuple(padding) + tuple(padding)
     if len(strides) != 1:
-        raise _InternalError("strides must contain 1 values")
+        raise RuntimeError("strides must contain 1 values")
     if len(padding) != 2:
-        raise _InternalError("padding must contain 2 values")
+        raise RuntimeError("padding must contain 2 values")
     if len(dilation) != 1:
-        raise _InternalError("dilation must contain 1 values")
+        raise RuntimeError("dilation must contain 1 values")
     if len(pool_size) != 1:
-        raise _InternalError("pool_size must contain 1 values")
+        raise RuntimeError("pool_size must contain 1 values")
     return _Call(
         "relax.nn.max_pool1d",
         [data],
@@ -999,8 +996,8 @@ def max_pool1d(
             layout=layout,
             out_layout=(layout if out_layout is None else out_layout),
         ),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1097,13 +1094,13 @@ def max_pool2d(
     if len(pool_size) == 1:
         pool_size = tuple(pool_size) * 2
     if len(strides) != 2:
-        raise _InternalError("strides must contain 2 values")
+        raise RuntimeError("strides must contain 2 values")
     if len(padding) != 4:
-        raise _InternalError("padding must contain 4 values")
+        raise RuntimeError("padding must contain 4 values")
     if len(dilation) != 2:
-        raise _InternalError("dilation must contain 2 values")
+        raise RuntimeError("dilation must contain 2 values")
     if len(pool_size) != 2:
-        raise _InternalError("pool_size must contain 2 values")
+        raise RuntimeError("pool_size must contain 2 values")
     return _Call(
         "relax.nn.max_pool2d",
         [data],
@@ -1119,8 +1116,8 @@ def max_pool2d(
             out_layout=(layout if out_layout is None else out_layout),
         ),
         ty_args=ty_args,
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1210,13 +1207,13 @@ def max_pool3d(
     if len(pool_size) == 1:
         pool_size = tuple(pool_size) * 3
     if len(strides) != 3:
-        raise _InternalError("strides must contain 3 values")
+        raise RuntimeError("strides must contain 3 values")
     if len(padding) != 6:
-        raise _InternalError("padding must contain 6 values")
+        raise RuntimeError("padding must contain 6 values")
     if len(dilation) != 3:
-        raise _InternalError("dilation must contain 3 values")
+        raise RuntimeError("dilation must contain 3 values")
     if len(pool_size) != 3:
-        raise _InternalError("pool_size must contain 3 values")
+        raise RuntimeError("pool_size must contain 3 values")
     return _Call(
         "relax.nn.max_pool3d",
         [data],
@@ -1231,8 +1228,8 @@ def max_pool3d(
             layout=layout,
             out_layout=(layout if out_layout is None else out_layout),
         ),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1309,13 +1306,13 @@ def avg_pool1d(
     if len(padding) == 1:
         padding = tuple(padding) + tuple(padding)
     if len(strides) != 1:
-        raise _InternalError("strides must contain 1 values")
+        raise RuntimeError("strides must contain 1 values")
     if len(padding) != 2:
-        raise _InternalError("padding must contain 2 values")
+        raise RuntimeError("padding must contain 2 values")
     if len(dilation) != 1:
-        raise _InternalError("dilation must contain 1 values")
+        raise RuntimeError("dilation must contain 1 values")
     if len(pool_size) != 1:
-        raise _InternalError("pool_size must contain 1 values")
+        raise RuntimeError("pool_size must contain 1 values")
     return _Call(
         "relax.nn.avg_pool1d",
         [data],
@@ -1330,8 +1327,8 @@ def avg_pool1d(
             layout=layout,
             out_layout=(layout if out_layout is None else out_layout),
         ),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1422,13 +1419,13 @@ def avg_pool2d(
     if len(pool_size) == 1:
         pool_size = tuple(pool_size) * 2
     if len(strides) != 2:
-        raise _InternalError("strides must contain 2 values")
+        raise RuntimeError("strides must contain 2 values")
     if len(padding) != 4:
-        raise _InternalError("padding must contain 4 values")
+        raise RuntimeError("padding must contain 4 values")
     if len(dilation) != 2:
-        raise _InternalError("dilation must contain 2 values")
+        raise RuntimeError("dilation must contain 2 values")
     if len(pool_size) != 2:
-        raise _InternalError("pool_size must contain 2 values")
+        raise RuntimeError("pool_size must contain 2 values")
     return _Call(
         "relax.nn.avg_pool2d",
         [data],
@@ -1443,8 +1440,8 @@ def avg_pool2d(
             layout=layout,
             out_layout=(layout if out_layout is None else out_layout),
         ),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1529,13 +1526,13 @@ def avg_pool3d(
     if len(pool_size) == 1:
         pool_size = tuple(pool_size) * 3
     if len(strides) != 3:
-        raise _InternalError("strides must contain 3 values")
+        raise RuntimeError("strides must contain 3 values")
     if len(padding) != 6:
-        raise _InternalError("padding must contain 6 values")
+        raise RuntimeError("padding must contain 6 values")
     if len(dilation) != 3:
-        raise _InternalError("dilation must contain 3 values")
+        raise RuntimeError("dilation must contain 3 values")
     if len(pool_size) != 3:
-        raise _InternalError("pool_size must contain 3 values")
+        raise RuntimeError("pool_size must contain 3 values")
     return _Call(
         "relax.nn.avg_pool3d",
         [data],
@@ -1550,8 +1547,8 @@ def avg_pool3d(
             layout=layout,
             out_layout=(layout if out_layout is None else out_layout),
         ),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -1614,7 +1611,7 @@ def adaptive_avg_pool1d(
     if isinstance(output_size, int):
         output_size = (output_size,)
     if output_size is not None and len(output_size) != 1:
-        raise _InternalError("output_size must contain 1 values")
+        raise RuntimeError("output_size must contain 1 values")
     return _Call(
         "relax.nn.adaptive_avg_pool1d",
         [data],
@@ -1624,8 +1621,8 @@ def adaptive_avg_pool1d(
             layout=layout,
             out_layout=(layout if out_layout is None else out_layout),
         ),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )  # type: ignore
 
 
@@ -1692,7 +1689,7 @@ def adaptive_avg_pool2d(
     if isinstance(output_size, int):
         output_size = (output_size, output_size)
     if output_size is not None and len(output_size) != 2:
-        raise _InternalError("output_size must contain 2 values")
+        raise RuntimeError("output_size must contain 2 values")
     return _Call(
         "relax.nn.adaptive_avg_pool2d",
         [data],
@@ -1703,8 +1700,8 @@ def adaptive_avg_pool2d(
             out_layout=(layout if out_layout is None else out_layout),
         ),
         ty_args=ty_args,
-        ty=ty,
         loc=loc,
+        ty=ty,
     )  # type: ignore
 
 
@@ -1770,7 +1767,7 @@ def adaptive_avg_pool3d(
     if isinstance(output_size, int):
         output_size = (output_size, output_size, output_size)
     if output_size is not None and len(output_size) != 3:
-        raise _InternalError("output_size must contain 3 values")
+        raise RuntimeError("output_size must contain 3 values")
     return _Call(
         "relax.nn.adaptive_avg_pool3d",
         [data],
@@ -1780,8 +1777,8 @@ def adaptive_avg_pool3d(
             layout=layout,
             out_layout=(layout if out_layout is None else out_layout),
         ),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )  # type: ignore
 
 
@@ -1801,7 +1798,7 @@ def relu(data: Expr, *, ty_args=None, ty=None, loc: Location = UNKNOWN_LOC) -> E
     result : relax.Expr
         The computed result.
     """
-    return _Call("relax.nn.relu", [data], ty_args=ty_args, ty=ty, loc=loc)  # type: ignore
+    return _Call("relax.nn.relu", [data], ty_args=ty_args, loc=loc, ty=ty)  # type: ignore
 
 
 def relu6(data: Expr) -> Expr:
@@ -1855,8 +1852,8 @@ def leakyrelu(
         [data],
         attrs=_make_attrs("relax.attrs.LeakyReluAttrs", alpha=alpha),
         ty_args=ty_args,
-        ty=ty,
         loc=loc,
+        ty=ty,
     )  # type: ignore
 
 
@@ -1882,7 +1879,7 @@ def gelu(data: Expr, *, ty_args=None, ty=None, loc: Location = UNKNOWN_LOC) -> E
     ----
     The input tensor is required to have float dtype
     """
-    return _Call("relax.nn.gelu", [data], ty_args=ty_args, ty=ty, loc=loc)  # type: ignore
+    return _Call("relax.nn.gelu", [data], ty_args=ty_args, loc=loc, ty=ty)  # type: ignore
 
 
 def gelu_tanh(data: Expr, *, ty_args=None, ty=None, loc: Location = UNKNOWN_LOC) -> Expr:
@@ -1905,7 +1902,7 @@ def gelu_tanh(data: Expr, *, ty_args=None, ty=None, loc: Location = UNKNOWN_LOC)
     ----
     The input tensor is required to have float dtype
     """
-    return _Call("relax.nn.gelu_tanh", [data], ty_args=ty_args, ty=ty, loc=loc)  # type: ignore
+    return _Call("relax.nn.gelu_tanh", [data], ty_args=ty_args, loc=loc, ty=ty)  # type: ignore
 
 
 def selu(data: Expr, *, ty_args=None, ty=None, loc: Location = UNKNOWN_LOC) -> Expr:
@@ -1929,7 +1926,7 @@ def selu(data: Expr, *, ty_args=None, ty=None, loc: Location = UNKNOWN_LOC) -> E
     result : relax.Expr
         The computed result.
     """
-    return _Call("relax.nn.selu", [data], ty_args=ty_args, ty=ty, loc=loc)
+    return _Call("relax.nn.selu", [data], ty_args=ty_args, loc=loc, ty=ty)
 
 
 def silu(data: Expr, *, ty_args=None, ty=None, loc: Location = UNKNOWN_LOC) -> Expr:
@@ -1952,7 +1949,7 @@ def silu(data: Expr, *, ty_args=None, ty=None, loc: Location = UNKNOWN_LOC) -> E
     ----
     The input tensor is required to have float dtype
     """
-    return _Call("relax.nn.silu", [data], ty_args=ty_args, ty=ty, loc=loc)  # type: ignore
+    return _Call("relax.nn.silu", [data], ty_args=ty_args, loc=loc, ty=ty)  # type: ignore
 
 
 @tvm_ffi.register_object("relax.attrs.SoftmaxAttrs")
@@ -1988,8 +1985,8 @@ def softmax(data: Expr, axis: int = -1, *, ty=None, loc: Location = UNKNOWN_LOC)
         "relax.nn.softmax",
         [data],
         attrs=_make_attrs("relax.attrs.SoftmaxAttrs", axis=axis),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )  # type: ignore
 
 
@@ -2033,8 +2030,8 @@ def softplus(
         [data],
         attrs=_make_attrs("relax.attrs.SoftplusAttrs", beta=beta, threshold=threshold),
         ty_args=ty_args,
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -2067,8 +2064,8 @@ def log_softmax(data: Expr, axis: int = -1, *, ty=None, loc: Location = UNKNOWN_
         "relax.nn.log_softmax",
         [data],
         attrs=_make_attrs("relax.attrs.SoftmaxAttrs", axis=axis),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )  # type: ignore
 
 
@@ -2104,8 +2101,8 @@ def prelu(data: Expr, alpha: Expr, axis: int = 1, *, ty=None, loc: Location = UN
         "relax.nn.prelu",
         [data, alpha],
         attrs=_make_attrs("relax.attrs.PReluAttrs", axis=axis),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -2239,8 +2236,8 @@ def batch_norm(
             momentum=momentum,
             training=training,
         ),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -2316,8 +2313,8 @@ def layer_norm(
         attrs=_make_attrs(
             "relax.attrs.LayerNormAttrs", axes=axes, epsilon=epsilon, center=center, scale=scale
         ),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )  # type: ignore
 
 
@@ -2394,8 +2391,8 @@ def group_norm(
             center=center,
             scale=scale,
         ),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -2461,8 +2458,8 @@ def instance_norm(
             center=center,
             scale=scale,
         ),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )
 
 
@@ -2515,8 +2512,8 @@ def rms_norm(
         "relax.nn.rms_norm",
         [data, weight],
         attrs=_make_attrs("relax.attrs.RMSNormAttrs", axes=axes, epsilon=epsilon),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )  # type: ignore
 
 
@@ -2551,8 +2548,8 @@ def dropout(data: Expr, rate: float = 0.5, *, ty=None, loc: Location = UNKNOWN_L
         "relax.nn.dropout",
         [data],
         attrs=_make_attrs("relax.attrs.DropoutAttrs", rate=rate),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )  # type: ignore
 
 
@@ -2586,8 +2583,8 @@ def cross_entropy_with_logits(
         "relax.nn.cross_entropy_with_logits",
         [predictions, labels],
         ty_args=ty_args,
-        ty=ty,
         loc=loc,
+        ty=ty,
     )  # type: ignore
 
 
@@ -2643,7 +2640,7 @@ def nll_loss(
       The computed result.
     """
     if reduction not in ("none", "sum", "mean"):
-        raise _InternalError("reduction must be none, sum, or mean")
+        raise RuntimeError("reduction must be none, sum, or mean")
     return _Call(
         "relax.nn.nll_loss",
         [predictions, targets, *([] if weights is None else [weights])],
@@ -2651,8 +2648,8 @@ def nll_loss(
             "relax.attrs.NLLLossAttrs", reduction=reduction, ignore_index=ignore_index
         ),
         ty_args=ty_args,
-        ty=ty,
         loc=loc,
+        ty=ty,
     )  # type: ignore
 
 
@@ -2761,8 +2758,8 @@ def attention(
             causal_mask=causal_mask,
             window_size=window_size,
         ),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )  # type: ignore
 
 
@@ -2870,8 +2867,8 @@ def attention_bias(
             causal_mask=causal_mask,
             window_size=window_size,
         ),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )  # type: ignore
 
 
@@ -2988,8 +2985,8 @@ def attention_var_len(
             causal_mask=causal_mask,
             window_size=window_size,
         ),
-        ty=ty,
         loc=loc,
+        ty=ty,
     )  # type: ignore
 
 
@@ -3009,4 +3006,4 @@ def batch_flatten(data: Expr, *, ty=None, loc: Location = UNKNOWN_LOC) -> Expr:
     result : relax.Expr
         The flattened result with shape `(batch_size, flattened_features)`.
     """
-    return _Call("relax.nn.batch_flatten", [data], ty=ty, loc=loc)  # type: ignore
+    return _Call("relax.nn.batch_flatten", [data], loc=loc, ty=ty)  # type: ignore

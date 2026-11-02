@@ -91,10 +91,6 @@ class RemoteDevice(tvm_ffi.Object):
                 raise AttributeError(f"RemoteDevice has no attribute {name!r}") from None
             return attribute.__get__(_RemoteDeviceAttributeQuery(self))
 
-    def texture_spatial_limit(self):
-        """Query the shared texture limit convenience through this session."""
-        return tvm_tirx.runtime.Device.texture_spatial_limit(_RemoteDeviceAttributeQuery(self))
-
     def empty(self, shape, dtype="float32", mem_scope=None):
         """Allocate a remote tensor through this device's session."""
         return _ffi_api.Empty(tvm_ffi.Shape(shape), tvm_ffi.dtype(dtype), self, mem_scope)
@@ -236,7 +232,10 @@ def time_evaluator(
     f_preproc="",
 ):
     """Create an evaluator after validating the module and remote device session."""
-    return module.time_evaluator(
+    from tvm.runtime import time_evaluator as runtime_time_evaluator
+
+    return runtime_time_evaluator(
+        module,
         func_name,
         device,
         number,

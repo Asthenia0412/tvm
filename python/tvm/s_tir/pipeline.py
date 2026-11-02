@@ -125,7 +125,11 @@ def _partition_dialects(mod):
     scheduled = {}
     native = {}
     for gv, func in mod.functions.items():
-        group = scheduled if isinstance(func, tirx.Function) and not func.is_tirx else native
+        group = (
+            scheduled
+            if isinstance(func, tirx.Function) and func.attrs.get("script.namespace") == "s_tir"
+            else native
+        )
         group[gv] = func
     return scheduled, native
 
@@ -180,8 +184,8 @@ def _prepare_legacy_target_binding(mod):
 
     def visit_loop(loop, visitor):
         nonlocal in_binding
-        visitor.visit(loop.min)
-        visitor.visit(loop.extent)
+        visitor.visit(loop.begin)
+        visitor.visit(loop.end)
         visitor.visit(loop.step)
         visitor.visit(loop.annotations)
         previous = in_binding
